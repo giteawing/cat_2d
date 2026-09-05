@@ -15,32 +15,34 @@ export function drawPortal(ctx, p, time, linked) {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(ang);   // now +x = normal (out of the wall), +y = tangent
-  const rl = PORTAL_HALF * open;   // half length along tangent (y)
+  // radii must never go negative (browsers throw IndexSizeError on negative arc/ellipse radii)
+  const rl = Math.max(4, PORTAL_HALF * open);   // half length along tangent (y)
   const rd = PORTAL_DEPTH * 0.5 * open + 2;
+  const R = (v) => Math.max(0.1, v);
   // outer glow
   const g = ctx.createRadialGradient(0, 0, 4, 0, 0, rl + 18);
   g.addColorStop(0, hexA(c.light, 0.35)); g.addColorStop(1, hexA(c.main, 0));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(2, 0, rd + 16, rl + 16, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(2, 0, R(rd + 16), R(rl + 16), 0, 0, TAU); ctx.fill();
   // dark inner (void)
   ctx.fillStyle = linked ? '#0B0E1A' : '#2A2E44';
-  ctx.beginPath(); ctx.ellipse(-3, 0, rd + 3, rl - 2, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-3, 0, R(rd + 3), R(rl - 2), 0, 0, TAU); ctx.fill();
   // swirl
   if (linked) {
     ctx.save();
-    ctx.beginPath(); ctx.ellipse(-3, 0, rd + 3, rl - 2, 0, 0, TAU); ctx.clip();
+    ctx.beginPath(); ctx.ellipse(-3, 0, R(rd + 3), R(rl - 2), 0, 0, TAU); ctx.clip();
     for (let i = 0; i < 4; i++) {
       const t = (time * 0.8 + i / 4) % 1;
       ctx.strokeStyle = hexA(c.light, 0.35 * (1 - t));
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(-3, 0, (rd + 3) * t, (rl - 2) * t, 0, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(-3, 0, R((rd + 3) * t), R((rl - 2) * t), 0, 0, TAU); ctx.stroke();
     }
     ctx.restore();
   }
   // ring
   ctx.lineWidth = 4; ctx.strokeStyle = c.main;
-  ctx.beginPath(); ctx.ellipse(0, 0, rd + 2, rl, 0, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, 0, R(rd + 2), R(rl), 0, 0, TAU); ctx.stroke();
   ctx.lineWidth = 1.5; ctx.strokeStyle = c.light;
-  ctx.beginPath(); ctx.ellipse(1, 0, rd + 1, rl - 3, 0, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(1, 0, R(rd + 1), R(rl - 3), 0, 0, TAU); ctx.stroke();
   // orbiting sparkles
   for (let i = 0; i < 3; i++) {
     const a = time * 3 + i * (TAU / 3);

@@ -17,8 +17,20 @@ globalThis.document = {
   createElement: (tag) => { if (tag === 'canvas') return wrapCanvas(createCanvas(10, 10)); return {}; },
   getElementById: () => null,
 };
+function strictCtx(ctx) {
+  // browsers throw IndexSizeError for negative radii; @napi-rs/canvas silently accepts them — emulate the browser.
+  const wrap = (name, idx) => {
+    const orig = ctx[name].bind(ctx);
+    ctx[name] = (...a) => { for (const i of idx) if (a[i] < 0 || Number.isNaN(a[i])) throw new RangeError(`${name}: negative/NaN radius ${a[i]}`); return orig(...a); };
+  };
+  wrap('arc', [2]); wrap('ellipse', [2, 3]); wrap('createRadialGradient', [2, 5]);
+  return ctx;
+}
 function wrapCanvas(c) {
   const cl = new Map();
+  const gc = c.getContext.bind(c);
+  let cached = null;
+  c.getContext = (t, o) => { const x = gc(t, o); if (x && x !== cached) { cached = x; strictCtx(x); } return x; };
   c.addEventListener = (ev, fn) => { (cl.get(ev) || cl.set(ev, []).get(ev)).push(fn); };
   c.getBoundingClientRect = () => ({ left: 0, top: 0, width: c.width, height: c.height });
   c.style = {};

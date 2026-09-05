@@ -12,8 +12,16 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+let errCount = 0;
 function loop(now) {
-  game.frame(now);
+  try {
+    game.frame(now);
+  } catch (err) {
+    // never let a single bad frame kill the game: reset canvas state, log, keep looping
+    errCount++;
+    if (errCount <= 5) console.error('frame error', err);
+    try { game.ctx.setTransform(1, 0, 0, 1, 0, 0); game.ctx.globalAlpha = 1; } catch (_) { /* ignore */ }
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
