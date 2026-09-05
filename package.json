@@ -1,0 +1,12 @@
+{
+  "name": "cat-portal-adventure-2d",
+  "version": "0.1.0",
+  "description": "Cat Portal Adventure 2D — puzzle-platformer with a Gravity Gun and a Portal Gun",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tools/test.mjs",
+    "shots": "node tools/smoke.mjs"
+  },
+  "license": "MIT"
+}
