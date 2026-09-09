@@ -13,10 +13,10 @@ function buildMap() {
   m.rect(22, 21, 24, 21, 'X');
   // B: canyon. No way across on foot: drop into a floor portal on this side, fall out of a ceiling portal on
   // the far side. The far side has a low hanging block whose underside is the ceiling target.
-  m.rect(32, 28, 47, 31, '.');                  // chasm (16 wide)
-  m.rect(32, 31, 47, 31, 'X');                  // metal bottom (no portals down there)
-  m.col(32, 28, 30, 'H'); m.col(47, 28, 30, 'H'); // ladders out of the chasm (no dead ends)
-  m.rect(48, 1, 54, 14);                        // hanging block over the far side (ceiling at row 14)
+  m.rect(32, 28, 41, 31, '.');                  // chasm (10 wide — too far to jump)
+  m.rect(32, 31, 41, 31, 'X');                  // metal bottom (no portals down there)
+  m.col(32, 28, 30, 'H'); m.col(41, 28, 30, 'H'); // ladders out of the chasm (no dead ends)
+  m.rect(42, 1, 48, 14);                        // hanging block over the far side (ceiling at row 14, visible from the near edge)
   // C: moving platform over a flowerbed to a high greenhouse ledge
   m.rect(59, 13, 66, 14);                       // greenhouse upper ledge (left), level with the lift's top stop
   m.rect(76, 8, 84, 9);                         // greenhouse top ledge (gift)
@@ -24,9 +24,9 @@ function buildMap() {
   m.rect(86, 20, 88, 20, 'X');
   m.rect(86, 4, 88, 12, 'G');                   // glass part of the wall (see-through, no portals)
   // D: speed loop. Floor portal pair to fall repeatedly? no — floor → high wall to reach the roof shelf.
-  m.rect(91, 8, 93, 8);                         // perch: climb the pole, step off to the right into the floor portal
-  m.col(92, 9, 27, 'H');
-  m.rect(96, 1, 97, 8);                         // pillar hanging from the ceiling (portal target: its right face)
+  m.col(92, 8, 27, 'H');                        // pole up to the perch
+  m.rect(93, 8, 95, 8);                         // perch beside the pole: step off its right edge into the floor portal
+  m.rect(96, 1, 97, 5);                         // pillar hanging from the ceiling (portal target: its right face); ends above the perch
   m.rect(108, 10, 118, 11);                     // high shelf with the rare gift
   m.rect(108, 10, 118, 10, 'X');
   m.rect(124, 1, 126, 24);                      // final wall, low passage (rows 25-27) under it
@@ -58,7 +58,7 @@ export const level05 = {
     // B: bridge
     k.sign(27, 25, 'Пропасть. Портал в пол здесь, портал в потолок вон под той плитой — и ты просто упадёшь на ту сторону.');
     k.message(28, 18, 4, 10, 'Через пропасть', 'Пол → потолок: гравитация перенесёт тебя сама');
-    k.gift(53, 20, 'normal', 'g1');                 // on the way down from the ceiling portal
+    k.gift(43, 20, 'normal', 'g1');                 // on the way down from the ceiling portal
     k.clutter(['plant', 'pot', 'ball', 'yarn'], 26, 28, 3, 62);
     k.decor('balloon', 40, 10, { color: '#F25C5C' });
     // C: platform
@@ -67,14 +67,14 @@ export const level05 = {
     k.platform(56, 27, 3, 56, 13, { requires: 'liftC', speed: 70, wait: 3, color: '#6B8E4E' });
     k.gift(79, 6, 'bonus', 'g2');
     k.sign(61, 10, 'Верхняя полка выше, чем прыжок. Портал в стену над ней + портал в пол здесь.');
-    k.clutter(['plant', 'plant', 'pot', 'jar', 'cup'], 61, 13, 5, 63);
-    k.plate(78, 8, 'doorC', { dx: 40, label: '' });          // plate beside the gift: press it (or leave a crate) to open the door below
+    k.clutter(['plant', 'plant', 'pot', 'jar', 'cup'], 59, 13, 2, 63);   // left end of the ledge — the right end is where the floor portal goes
+    k.plate(78, 8, 'doorC', { dx: 24, w: 3 * 32, label: '' });          // plate beside the gift: press it (or leave a crate) to open the door below
     k.door(86, 21, 3, 7, 'doorC', { dir: 'up', travel: 7 * 32 });
     k.sign(70, 25, 'Дверь открывает плита на верхней полке. Что-то тяжёлое должно остаться на ней… или пробеги, пока стоишь?');
     k.prop('crate', 66, 28); k.prop('barrel', 72, 28);
     k.funRoom(62, 28, 22, 64, 0.5);
     // D: high shelf
-    k.sign(94, 25, 'Полка под потолком, далеко. Портал в пол под шестом, второй — в правый бок столба под потолком. Залезь на шест, шагни в портал — и лети!');
+    k.sign(94, 25, 'Полка под потолком, далеко. Портал в пол справа от шеста, второй — в правый бок столба под потолком. Залезь на шест, шагни с полки в портал — и лети!');
     k.gift(113, 8, 'rare', 'g3');
     k.clutter(['plant', 'pot', 'book', 'cup', 'jar'], 109, 10, 8, 65);
     k.funRoom(100, 28, 20, 66, 0.6);

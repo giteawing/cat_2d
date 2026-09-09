@@ -36,9 +36,11 @@ export async function begin(levelIndex) {
     /** climb (W) until the cat's feet are at or above tile row */
     climbTo(row, max = 800) { d.key('KeyW'); let n = 0; while (p.body.bottom > row * T - 0.5 && n < max) { d.step(1); n++; } d.releaseAll(); d.step(12); return p.body.bottom <= row * T + 2; },
     /** aim at a world point that must be visible, wait for the cat to turn, click */
-    aimClick(wx, wy, btn) { d.aimVisible(wx, wy); d.step(20); d.click(btn); d.step(30); },
+    aimClick(wx, wy, btn) { for (let i = 0; i < 20; i++) { d.aimVisible(wx, wy); d.step(1); } d.click(btn); d.step(30); },   // re-aim every frame: the camera may still be scrolling
     /** peek up/down (S/W while standing) then aim+click; releases the key afterwards */
-    peekAimClick(dirKey, wx, wy, btn, wait = 130) { d.key(dirKey); d.step(wait); try { w.aimClick(wx, wy, btn); } finally { d.releaseAll(); d.step(30); } },
+    /** move the mouse to the screen edge on the side of the target so the cat (and the camera look-ahead) face it */
+    face(wx) { d.mouse(wx > p.body.cx ? d.canvas.width - 8 : 8, d.canvas.height / 2); d.step(45); },
+    peekAimClick(dirKey, wx, wy, btn, wait = 130) { w.face(wx); d.key(dirKey); d.step(wait); try { w.aimClick(wx, wy, btn); } finally { d.releaseAll(); d.step(30); } },
     selectWeapon(kind) { game.weapons.select(kind); d.step(5); },
     /** grab the nearest body of a kind (must be on screen); returns the body or null */
     grab(kind, filter = () => true) {

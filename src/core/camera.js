@@ -1,7 +1,7 @@
 // Smooth-follow camera with look-ahead, vertical dead zone and level bounds.
 import { clamp, damp, lerp } from './util.js';
 
-const PEEK_MAX = 600;   // px of world the look-up scroll can travel (≈19 tiles)
+const PEEK_MAX = 720;   // px of world the look-up scroll can travel (≈22 tiles: enough to see the ceiling of a 32-row room)
 
 export class Camera {
   constructor(viewW, viewH) {

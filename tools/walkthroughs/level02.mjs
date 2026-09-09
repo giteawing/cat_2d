@@ -24,9 +24,9 @@ w.expect(game.giftsCollected === 1, 'gift 1 collected');
 w.walkTo(54); w.walk(1, 30, false); d.step(90); w.where('floor after ledge');
 // pillar at cols 60-62 blocks the floor: portal in the ceiling beyond it (through the grate at col 61) + floor portal here
 w.selectWeapon('portal'); w.walkTo(57); d.step(60);
-w.peekAimClick('KeyW', 66 * T, 1 * T + 1, 2);
-w.expect(w.portal('orange').active && w.portal('orange').x > 63 * T, 'orange in the ceiling beyond the pillar');
-w.aimClick(56 * T, 22 * T - 1, 0); w.walkTo(56); d.step(160); w.where('beyond pillar');
+w.peekAimClick('KeyW', 67.5 * T, 1 * T + 1, 2);
+w.expect(w.portal('orange').active && w.portal('orange').x > 63 * T, `orange in the ceiling beyond the pillar (${(w.portal('orange').x / T).toFixed(1)})`);
+w.aimClick(54.5 * T, 22 * T - 1, 0); w.walkTo(w.portal('blue').x / T); d.step(160); w.where('beyond pillar');   // step onto the floor portal
 w.expect(p.body.cx > 63 * T, 'crossed the pillar');
 // the cat landed on the pedestal (66-74, top row 18) with the crate; grab it
 w.selectWeapon('gravity'); d.step(30); w.where('pedestal');
