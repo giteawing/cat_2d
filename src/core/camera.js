@@ -1,6 +1,8 @@
 // Smooth-follow camera with look-ahead, vertical dead zone and level bounds.
 import { clamp, damp, lerp } from './util.js';
 
+const PEEK_MAX = 600;   // px of world the look-up scroll can travel (≈19 tiles)
+
 export class Camera {
   constructor(viewW, viewH) {
     this.x = 0; this.y = 0;           // top-left in world coords
@@ -33,18 +35,25 @@ export class Camera {
     if (player.onGround || player.climbing) this.targetY = lerp(this.targetY, b.cy, damp(6, dt));
     else if (Math.abs(dy) > 110) this.targetY = b.cy - Math.sign(dy) * 110;
     // peek: hold down (crouch) or up while standing still to look further down / up
+    // Rooms are tall: keep looking and the camera keeps scrolling (up to PEEK_MAX) so ceilings can be seen and aimed at.
     let peekWant = 0;
-    if (player.onGround && Math.abs(b.vx) < 10 && !player.climbing) { if (player.input.down) peekWant = 150; else if (player.input.up) peekWant = -150; }
-    this.peek = lerp(this.peek || 0, peekWant, damp(peekWant ? 1.5 : 5, dt));
+    if (player.onGround && Math.abs(b.vx) < 10 && !player.climbing) { if (player.input.down) peekWant = PEEK_MAX * 0.7; else if (player.input.up) peekWant = -PEEK_MAX; }
+    this.peek = this.peek || 0;
+    if (peekWant) { const speed = Math.abs(this.peek) < 150 ? 900 : 520; this.peek = peekWant > 0 ? Math.min(peekWant, this.peek + speed * dt) : Math.max(peekWant, this.peek - speed * dt); }
+    else this.peek = lerp(this.peek, 0, damp(6, dt));
+    const peeking = Math.abs(this.peek) > 20;
     const ty = this.targetY - 20 + this.peek;
     const nx = lerp(this.x + this.w / 2, tx, damp(5, dt));
-    let ny = lerp(cy, ty, damp(5, dt));
-    // hard limit: never let the cat leave the visible frame (portal flings can be very fast)
+    let ny = lerp(cy, ty, damp(peeking ? 8 : 5, dt));
+    // hard limit: never let the cat leave the visible frame (portal flings can be very fast) — except while the player
+    // deliberately looks up/down standing still
     const margin = 70;
     const top = ny - this.h / 2, bottom = ny + this.h / 2, left = nx - this.w / 2, right = nx + this.w / 2;
     let fx = nx;
-    if (b.cy < top + margin) ny = b.cy - margin + this.h / 2;
-    else if (b.cy > bottom - margin) ny = b.cy + margin - this.h / 2;
+    if (!peeking) {
+      if (b.cy < top + margin) ny = b.cy - margin + this.h / 2;
+      else if (b.cy > bottom - margin) ny = b.cy + margin - this.h / 2;
+    }
     if (b.cx < left + margin) fx = b.cx - margin + this.w / 2;
     else if (b.cx > right - margin) fx = b.cx + margin - this.w / 2;
     if (ny !== cy && Math.abs(b.cy - this.targetY) > 110) this.targetY = b.cy;

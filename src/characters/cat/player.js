@@ -117,7 +117,12 @@ export class Player {
       const vdir = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
       b.vy = vdir * CLIMB_SPEED;
       b.vx = approach(b.vx, dir * 110, 2000 * dt);
-      // center on the ladder gently
+      // center on the ladder gently (so the cat fits through 1-tile holes in floors above/below the ladder)
+      if (dir === 0) {
+        const lc = Math.floor((b.cx) / TILE);
+        const ladderCol = map.isLadder(map.get(lc, Math.floor(b.cy / TILE))) ? lc : map.isLadder(map.get(lc - 1, Math.floor(b.cy / TILE))) ? lc - 1 : map.isLadder(map.get(lc + 1, Math.floor(b.cy / TILE))) ? lc + 1 : null;
+        if (ladderCol !== null) { const target = ladderCol * TILE + TILE / 2 - b.w / 2; b.x = approach(b.x, target, 120 * dt); }
+      }
       if (inp.jumpPressed) { this.climbing = false; b.gravityScale = 1; b.vy = -JUMP_SPEED * 0.85; this.jumping = true; this.emit('jump'); inp.jumpPressed = false; }
       if (dir !== 0) this.facing = dir;
       return;

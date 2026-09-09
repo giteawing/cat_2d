@@ -8,7 +8,7 @@ function buildMap() {
   m.rect(0, 20, 95, 23);                 // ground
   // --- section A: steps ---
   m.rect(10, 19, 11, 19); m.rect(14, 18, 15, 19); m.rect(18, 17, 19, 19);
-  m.row(16, 6, 8, '='); m.row(13, 2, 4, '=');      // secret ledge above the start
+  m.row(17, 6, 8, '='); m.row(14, 2, 4, '=');      // secret ledge above the start (3 tiles per hop: a full jump reaches ~3.3)
   // --- pit with a ladder out ---
   m.rect(24, 20, 26, 22, '.'); m.col(26, 19, 22, 'H');
   // --- platforms up to the upper floor ---
@@ -19,8 +19,8 @@ function buildMap() {
   m.col(60, 13, 19);                       // wall between the living room and the kitchen
   m.col(63, 12, 19, 'H');                  // ladder back up from the kitchen
   // --- kitchen shelves ---
-  m.row(16, 66, 72, '='); m.row(16, 80, 88, '=');
-  m.row(13, 84, 88, '=');
+  m.row(17, 66, 72, '='); m.row(17, 80, 88, '=');   // counters: 3 tiles above the floor (jumpable)
+  m.row(14, 84, 88, '=');                             // high shelf: 3 tiles above the counter
   return m.lines();
 }
 
@@ -38,8 +38,8 @@ export const level01 = {
     k.prop('yarn', 21, 20);
     k.decor('window', 5, 8, { w: 96, h: 96 }); k.decor('picture', 28, 9, { w: 40, h: 32, color: '#F2A0B8' });
     k.decor('balloon', 20, 6, { color: '#5BC0DE' }); k.decor('balloon', 22, 7, { color: '#F25C5C' });
-    k.gift(3, 11, 'secret', 'secret1');
-    k.secret(2, 10, 3, 3, 's1');
+    k.gift(3, 12, 'secret', 'secret1');
+    k.secret(2, 11, 3, 3, 's1');
     k.sign(23, 17, 'Упал в яму? Не беда — лестница поможет. Таймеров тут нет.');
     k.message(29, 13, 6, 7, 'Тонкие полки', 'Прыгай на них снизу, спускайся через S + Space');
     // upper floor: gravity gun & plate puzzle
@@ -60,10 +60,10 @@ export const level01 = {
     k.message(37, 13, 4, 7, 'Гостиная', 'Тут можно просто раскидать вещи ради веселья');
     // kitchen fun room
     k.message(61, 12, 3, 8, 'Кухня!', 'Десятки предметов — устрой хаос с Gravity Gun');
-    k.clutter(['cup', 'cup', 'plate', 'plate', 'jar', 'bottle', 'cup', 'can', 'jar', 'pot'], 66, 16, 7, 21);
-    k.clutter(['pot', 'pot', 'cup', 'plate', 'plate', 'bottle', 'bottle', 'jar', 'can', 'can', 'cup'], 80, 16, 9, 22);
-    k.clutter(['cup', 'bottle', 'jar', 'figurine', 'can'], 84, 13, 5, 23);
-    k.gift(86, 11, 'bonus', 'g2');
+    k.clutter(['cup', 'cup', 'plate', 'plate', 'jar', 'bottle', 'cup', 'can', 'jar', 'pot'], 66, 17, 7, 21);
+    k.clutter(['pot', 'pot', 'cup', 'plate', 'plate', 'bottle', 'bottle', 'jar', 'can', 'can', 'cup'], 80, 17, 9, 22);
+    k.clutter(['cup', 'bottle', 'jar', 'figurine', 'can'], 84, 14, 5, 23);
+    k.gift(86, 12, 'bonus', 'g2');
     k.clutter(['box', 'smallBox', 'stool', 'can', 'ball', 'box', 'pot', 'plate', 'cup', 'bottle', 'smallBox', 'jar', 'teddy', 'toyCube', 'can', 'bigBall', 'cup', 'pot', 'jar', 'can', 'bottle', 'plate', 'cup', 'box'], 65, 20, 24, 24);
     k.stack('plate', 70, 20, 5); k.stack('cup', 75, 20, 3); k.stack('box', 78, 20, 3); k.stack('can', 82, 20, 4); k.stack('smallBox', 86, 20, 3); k.stack('cup', 68, 20, 2, { dx: 10 });
     k.clutter(['cup', 'jar', 'can', 'cup', 'bottle', 'plate'], 61, 20, 4, 25);

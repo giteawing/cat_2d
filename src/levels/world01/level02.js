@@ -15,8 +15,8 @@ function buildMap() {
   m.rect(45, 12, 54, 13);                       // ledge continues
   m.rect(30, 1, 30, 4, 'X');                    // some metal decoration (non-portalable)
   // C: crate room: a crate behind a grate, a plate & door
-  m.rect(60, 14, 62, 21);                       // pillar
-  m.col(61, 9, 13, '|');                        // grate above pillar (see-through, shootable)
+  m.rect(60, 18, 62, 21);                       // pillar (4 tall: too high to jump, low enough to see over)
+  m.rect(60, 9, 62, 17, '|');                   // tall grate on top of the pillar: see-through and shootable, not passable
   m.rect(66, 18, 74, 21);                       // pedestal with the crate (unreachable from the floor? reachable by jump)
   m.rect(78, 1, 80, 15);                        // wall with a door at the bottom (rows 16-21 door area)
   m.rect(78, 16, 80, 17, 'X');                  // metal lintel (non portalable) above the door
