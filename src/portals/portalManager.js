@@ -241,6 +241,14 @@ export class PortalManager {
           const over = Math.min(along + halfT0, PORTAL_HALF) - Math.max(along - halfT0, -PORTAL_HALF);
           if (over > halfT0 * (body.type === 'character' ? 1.1 : 1.0)) penetrating = true;
         }
+        // fast arrivals from above: anything falling onto a floor portal with at least a third of its footprint over the
+        // hole is funnelled in (a cat dropping from a height should never balance on the rim of the portal)
+        if (!penetrating && p.ny < 0 && intoSpeed > 350 && side < halfN + 12 && !body.dropThroughBlock) {
+          const along = p.along(cx, cy);
+          const halfT0 = (Math.abs(p.tx) * body.w + Math.abs(p.ty) * body.h) / 2;
+          const over = Math.min(along + halfT0, PORTAL_HALF) - Math.max(along - halfT0, -PORTAL_HALF);
+          if (over > halfT0 * 0.66) penetrating = true;
+        }
         if (penetrating && !(p.ny < 0 && body.restPortal === p)) {
           const halfT = (Math.abs(p.tx) * body.w + Math.abs(p.ty) * body.h) / 2;
           const along = p.along(cx, cy);

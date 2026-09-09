@@ -84,7 +84,12 @@ export class WeaponSystem {
     if (l > 1) { p.aimX = dx / l; p.aimY = dy / l; }
     const targetAngle = Math.atan2(p.aimY, p.aimX);
     // the cat turns toward the aim (unless walking the other way); the gun can point anywhere in the front half
-    if (p.moveInput === 0 && this.current) p.facing = p.aimX >= 0 ? 1 : -1;
+    // Facing is decided from the cursor relative to the BODY centre with hysteresis: the hand position itself depends
+    // on facing, so deciding from the hand→cursor vector made the cat flip-flop every frame when aiming straight up/down.
+    if (p.moveInput === 0 && this.current) {
+      const off = input.mouseWorldX - p.body.cx;
+      if (off > 6) p.facing = 1; else if (off < -6) p.facing = -1;
+    }
     let ang = targetAngle;
     if (p.facing === 1) ang = clamp(normAngle(ang), -1.5, 1.5);
     else { const m = normAngle(Math.PI - ang); ang = Math.PI - clamp(m, -1.5, 1.5); }
@@ -224,14 +229,42 @@ export class WeaponSystem {
     this.game.sfx('gravDrop');
   }
 
+  /** Throw speed for a body (heavier = slower). */
+  throwSpeed(b) { return clamp(THROW_SPEED * (1 / Math.sqrt(Math.max(0.35, b.mass * 0.35))), 380, 1000); }
+
+  /**
+   * Ballistic aim assist: direction so that a projectile launched at speed s from (from) passes through the cursor
+   * point (target) under gravity. Falls back to the straight aim direction when the point is out of reach.
+   */
+  ballisticAim(from, target, s, g) {
+    const dx = target.x - from.x, dy = target.y - from.y;      // dy: +down
+    const disc = s * s * s * s - g * (g * dx * dx - 2 * dy * s * s);
+    if (disc < 0 || Math.abs(dx) < 1) return null;
+    // the flatter (low) trajectory; in screen coords (y down) the launch angle theta satisfies
+    // tan(theta) = (s^2 - sqrt(disc)) / (g*dx) with theta measured with y up, so negate for y down
+    const tanUp = (s * s - Math.sqrt(disc)) / (g * dx);
+    const ax = dx >= 0 ? 1 : -1;
+    const ay = -tanUp * ax;
+    const l = Math.hypot(ax, ay);
+    return { x: ax / l, y: ay / l };
+  }
+
   throw(aim) {
     const b = this.held;
     this.held = null; b.held = false; b.holder = null;
     b.releaseFrom = this.player.body; b.releaseUntil = this.game.world.time + 0.35;
-    const sp = THROW_SPEED * (1 / Math.sqrt(Math.max(0.35, b.mass * 0.35)));
-    const s = clamp(sp, 380, 1000);
-    b.vx = aim.x * s + this.player.body.vx * 0.3;
-    b.vy = aim.y * s;
+    const s = this.throwSpeed(b);
+    // aim assist: hit the point under the cursor when it is within ballistic reach
+    const from = { x: b.cx, y: b.cy };
+    const target = { x: this.game.input.mouseWorldX, y: this.game.input.mouseWorldY };
+    const g = this.game.world.gravity * (b.gravityScale ?? 1);
+    const dist = Math.hypot(target.x - from.x, target.y - from.y);
+    const assisted = dist > 60 ? this.ballisticAim(from, target, s, g) : null;
+    // blend: keep the player's intent (raw aim) but correct toward the ballistic solution
+    let ax = aim.x, ay = aim.y;
+    if (assisted && Math.acos(clamp(assisted.x * aim.x + assisted.y * aim.y, -1, 1)) < 0.6) { ax = assisted.x; ay = assisted.y; }
+    b.vx = ax * s + this.player.body.vx * 0.3;
+    b.vy = ay * s;
     b.spin = (Math.random() - 0.5) * 14;
     b.wake();
     this.recoil = 1;

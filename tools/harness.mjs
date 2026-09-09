@@ -64,6 +64,12 @@ export class Driver {
   mouse(x, y) { dispatch(this.canvas, 'mousemove', { clientX: x, clientY: y }); }
   /** Point the mouse at a world position */
   aimWorld(wx, wy) { const s = this.game.camera.worldToScreen(wx, wy); this.mouse(s.x, s.y); }
+  /** Like aimWorld but refuses targets a real player could not see (outside the canvas). */
+  aimVisible(wx, wy) {
+    const s = this.game.camera.worldToScreen(wx, wy);
+    if (s.x < 0 || s.y < 0 || s.x > this.canvas.width || s.y > this.canvas.height) throw new Error(`aim target off-screen: world ${(wx / 32).toFixed(1)},${(wy / 32).toFixed(1)} → screen ${s.x | 0},${s.y | 0}`);
+    this.mouse(s.x, s.y);
+  }
   click(button = 0) { dispatch(this.canvas, 'mousedown', { button, clientX: this.game.input.mouseX, clientY: this.game.input.mouseY }); this.step(1); dispatch(globalThis, 'mouseup', { button }); }
   /** advance n frames at 60 fps */
   step(n = 1, dt = 1000 / 60) { for (let i = 0; i < n; i++) { this.now += dt; this.game.frame(this.now); } }

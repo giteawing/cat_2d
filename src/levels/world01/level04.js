@@ -11,8 +11,8 @@ function buildMap() {
   // height into the floor portal shoots you out of the wall portal horizontally across the pit.
   m.rect(12, 1, 13, 25);                        // tall wall behind the start: the "cannon" wall (rows 1-25)
   m.rect(12, 20, 13, 25, '.');                  // ... with a passage at the bottom (rows 20-25)
-  m.rect(24, 26, 30, 28, '.');                  // wide pit (7 tiles — too far to jump)
-  m.rect(24, 29, 30, 29, 'X');                  // metal bottom (no portals down there)
+  m.rect(24, 26, 28, 28, '.');                  // pit (5 tiles — too far to jump, short enough for a modest fling)
+  m.rect(24, 29, 28, 29, 'X');                  // metal bottom (no portals down there)
   m.col(24, 26, 28, 'H');                       // ladder back out of the pit
   m.rect(16, 10, 18, 10, '=');                  // high shelf to fall from: step off its right edge into the floor portal
   m.col(16, 10, 25, 'H');                       // ladder to the shelf
@@ -21,14 +21,16 @@ function buildMap() {
   m.rect(48, 19, 50, 19, 'X');
   m.rect(58, 14, 70, 15);                       // ledge you reach with the fan (fan column is at 55-57, beside it)
   m.rect(58, 16, 58, 25, 'X');                  // metal column marking the fan shaft (right side)
-  m.rect(54, 16, 54, 25, 'X');                  // metal column (left side)
-  m.rect(71, 1, 73, 13);                        // upper wall: passage over the ledge blocked → go under? no: rows 14-15 ledge,
-  m.rect(71, 14, 73, 15, '.');                  // gap in the wall at ledge height (walk through on the ledge)
+  m.rect(54, 16, 54, 23, 'X');                  // metal column (left side) — open at the bottom (rows 24-25) so you can walk in
+  m.rect(71, 1, 73, 10);                        // upper wall ...
+  m.rect(71, 11, 73, 13, '.');                  // ... with a 3-tile doorway ABOVE the ledge (the cat walks through standing)
+  m.rect(71, 14, 73, 15);                       // the ledge continues through the doorway
   m.rect(71, 16, 73, 25);                       // wall below the ledge
   // C: crate through a grate. Button behind a grate window: hit it with a thrown ball via a portal? Simpler:
   // a plate on a high shelf reachable only by objects; a wall portal + floor portal deliver a crate.
-  m.rect(88, 10, 91, 11);                       // high shelf (plate on top). Ceiling above it is brick → portal target
-  m.rect(88, 10, 91, 10, 'X');                  // metal top
+  m.rect(78, 1, 95, 15);                        // low ceiling over section C (row 16 is the ceiling face — visible from the floor when peeking up)
+  m.rect(88, 19, 91, 20);                       // high shelf (plate on top). Ceiling above it is brick → portal target
+  m.rect(88, 19, 91, 19, 'X');                  // metal top
   m.rect(96, 1, 98, 18);                        // final wall with the door at the bottom
   m.rect(96, 18, 98, 18, 'X');
   // after the door: a flat corridor, then a cracked wall (cols 116-120) sealing the exit alcove
@@ -53,12 +55,12 @@ export const level04 = {
     k.sign(18, 23, 'Чем выше падение — тем дальше полёт.');
     k.decor('poster', 15, 12, { w: 44, h: 26, text: 'SPEED', color: '#B9D3EE' });
     k.decor('pipe', 14, 2, { w: 12, h: 200 }); k.decor('pipe', 40, 3, { w: 300, h: 10 });
-    k.clutter(['can', 'jar', 'bottle', 'wrench', 'box', 'tire'], 15, 26, 8, 51);
-    k.prop('tire', 20, 26); k.prop('ball', 8, 8);
-    k.gift(28, 22, 'normal', 'g1');               // floats above the pit: grab it mid-flight
+    k.clutter(['can', 'jar', 'bottle', 'wrench', 'box'], 3, 26, 7, 51);   // keep the floor under the shelf clear for the portal
+    k.prop('tire', 9, 26); k.prop('ball', 8, 8);
+    k.gift(25, 13, 'normal', 'g1');               // floats high over the pit, right on the fling trajectory
     // B: fan + button
     k.sign(40, 23, 'Дверь открывается кнопкой на стене. Не дотянуться — кинь в неё что-нибудь!');
-    k.button(44, 18, 'btnB', { dy: 0 });          // high on the wall: hit with a thrown object
+    k.button(47, 19, 'btnB', { dx: 6, latch: true });   // mounted on the wall face beside the door, above reach: hit it with a thrown object
     k.door(48, 20, 3, 6, 'btnB', { dir: 'up', travel: 6 * 32 });
     k.clutter(['ball', 'ball', 'can', 'toyCube', 'box'], 38, 26, 5, 52);
     k.sign(53, 23, 'Вентилятор поднимет тебя и всё лёгкое. Включается рычагом.');
@@ -69,9 +71,9 @@ export const level04 = {
     k.gift(68, 12, 'normal', 'g2');
     k.clutter(['jar', 'book', 'bookUp', 'cup'], 63, 14, 5, 54);
     // C: crate onto the high plate (portal from the floor into the wall above the shelf, or via fan?)
-    k.sign(74, 23, 'Плита — на металлической полке. Портал в потолок НАД полкой (стреляй издалека, под углом) + портал в пол. Урони ящик!');
+    k.sign(75, 23, 'Плита — на металлической полке. Портал в потолок НАД полкой + портал в пол. Урони ящик в пол — он упадёт с потолка на плиту!');
     k.prop('crate', 80, 26); k.prop('crate', 92, 26, { dx: 6 });
-    k.plate(88, 10, 'plateC', { dx: 6, w: 3.6 * 32 });
+    k.plate(88, 19, 'plateC', { dx: 6, w: 3.6 * 32 });
     k.door(96, 19, 3, 7, 'plateC', { dir: 'up', travel: 7 * 32 });
     k.decor('poster', 88, 20, { w: 48, h: 26, text: 'LIFT', color: '#B9D3EE' });
     k.funRoom(86, 26, 8, 55, 0.6);
@@ -80,6 +82,6 @@ export const level04 = {
     k.prop('bigCrate', 106, 26);
     k.clutter(['can', 'bottle', 'jar'], 100, 26, 3, 56);
     k.gift(123, 24, 'rare', 'g3');
-    k.decor('lampHang', 108, 1); k.decor('lampHang', 30, 1);
+    k.decor('lampHang', 108, 1); k.decor('lampHang', 30, 1); k.decor('lampHang', 80, 16);
   },
 };

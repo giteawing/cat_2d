@@ -208,7 +208,7 @@ export class Player {
 
     // aim facing when holding a gun and idle
     const aiming = this.weapon && this.weapon.isAiming();
-    if (aiming && this.moveInput === 0) this.facing = this.aimX >= 0 ? 1 : -1;
+    if (aiming && this.moveInput === 0 && Math.abs(this.aimX) > 0.25) this.facing = this.aimX >= 0 ? 1 : -1;
 
     // footsteps
     const speed = Math.abs(b.vx - (b.groundBody ? b.groundBody.vx : 0));

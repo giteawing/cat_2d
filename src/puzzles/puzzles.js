@@ -73,7 +73,17 @@ export class Button {
     let hit = false;
     if (near && game.frameInput.interactPressed) { hit = true; game.frameInput.interactPressed = false; }
     // thrown objects
-    const bodies = game.world.query(this.x - 2, this.y - 2, this.w + 4, this.h + 4, (b) => b.grabbable && !b.held && Math.hypot(b.vx, b.vy) > 160);
+    // generous hit zone (the button is small and thrown things are fast): the box grown by 10 px, plus a swept check
+    // against where the body was one step ago so a ball cannot tunnel past between two physics steps
+    const pad = 10;
+    const bodies = game.world.query(this.x - pad - 40, this.y - pad - 40, this.w + pad * 2 + 80, this.h + pad * 2 + 80, (b) => {
+      if (!b.grabbable || b.held || Math.hypot(b.vx, b.vy) < 120) return false;
+      const bx0 = this.x - pad, by0 = this.y - pad, bx1 = this.x + this.w + pad, by1 = this.y + this.h + pad;
+      const over = (x, y, w, h) => x < bx1 && x + w > bx0 && y < by1 && y + h > by0;
+      if (over(b.x, b.y, b.w, b.h)) return true;
+      const px = b.x - b.vx / 60, py = b.y - b.vy / 60;   // previous position (approx. one frame back)
+      return over(Math.min(px, b.x), Math.min(py, b.y), Math.abs(b.vx / 60) + b.w, Math.abs(b.vy / 60) + b.h);
+    });
     // the same object bouncing around the button counts as one hit until it has been away for a moment
     if (this.hitterClear > 0) { this.hitterClear -= dt; if (this.hitterClear <= 0) this.lastHitter = null; }
     const fresh = bodies.find((b) => b !== this.lastHitter);
