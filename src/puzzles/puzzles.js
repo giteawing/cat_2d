@@ -68,7 +68,7 @@ export class Button {
   }
   update(dt, game) {
     const p = game.player.body;
-    const near = p.x < this.x + this.w + 26 && p.right > this.x - 26 && p.y < this.y + this.h + 26 && p.bottom > this.y - 26;
+    const near = p.x < this.x + this.w + 28 && p.right > this.x - 28 && p.y < this.y + this.h + 40 && p.bottom > this.y - 64;
     game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E' });
     let hit = false;
     if (near && game.frameInput.interactPressed) { hit = true; game.frameInput.interactPressed = false; }
@@ -116,7 +116,7 @@ export class Lever {
   }
   update(dt, game) {
     const p = game.player.body;
-    const near = p.x < this.x + this.w + 24 && p.right > this.x - 24 && p.y < this.y + this.h + 30 && p.bottom > this.y - 30;
+    const near = p.x < this.x + this.w + 28 && p.right > this.x - 28 && p.y < this.y + this.h + 40 && p.bottom > this.y - 64;
     game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E' });
     if (near && game.frameInput.interactPressed) { game.frameInput.interactPressed = false; this.on = !this.on; game.sfx('lever'); game.player.playEmote('surprise', 0.3); }
     this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 12));

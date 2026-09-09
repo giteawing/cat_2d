@@ -275,7 +275,10 @@ export class Game {
     const mw = this.camera.screenToWorld(inp.mouseX, inp.mouseY);
     this.input.mouseWorldX = mw.x; this.input.mouseWorldY = mw.y;
     inp.mouseWorldX = mw.x; inp.mouseWorldY = mw.y;
-    this.frameInput = inp;   // puzzles read one-shot presses from here (and consume them)
+    // puzzles read one-shot presses from here (and consume them). A frame may run zero physics steps, so latch the
+    // press until a step has actually seen it — otherwise E presses could be silently dropped.
+    if (this.frameInput && this.frameInput.interactPressed && this.frameInput.pendingSteps) inp.interactPressed = true;
+    this.frameInput = inp; inp.pendingSteps = true;
     this.player.setInput({ left: inp.left, right: inp.right, up: inp.up, down: inp.down, jump: inp.jump, run: inp.run });
     if (inp.jumpPressed) this.player.input.jumpPressed = true;
 
@@ -286,6 +289,7 @@ export class Game {
       for (const p of this.puzzles) p.update(FIXED_DT, this);
       this.world.step(FIXED_DT);
       this.accumulator -= FIXED_DT; steps++;
+      inp.pendingSteps = false; inp.interactPressed = false;   // one-shots consumed by this step
     }
     if (steps === 8) this.accumulator = 0;
     this.player.update(dt, this.world);

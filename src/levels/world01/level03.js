@@ -52,7 +52,7 @@ export const level03 = {
     k.message(30, 16, 5, 8, 'Предмет сквозь портал', 'Ящик упадёт в портал в полу и вылетит из потолка прямо на плиту');
     k.prop('crate', 32, 24); k.prop('crate', 33, 24, { dx: 4 });
     k.prop('cube', 30, 24);
-    k.plate(47, 11, 'doorB', { label: '', dx: 8 });
+    k.plate(46, 11, 'doorB', { label: '', dx: 4, w: 5 * 32 - 8 });   // covers the whole tower top
     k.door(56, 19, 3, 5, 'doorB', { dir: 'up', travel: 5 * 32 });
     k.gift(53, 22, 'normal', 'g1');
     k.decor('lampHang', 42, 1);
@@ -60,13 +60,13 @@ export const level03 = {
     k.clutter(['teddy', 'yarn', 'toyCube'], 51, 24, 4, 47);
     // C: lever + platform
     k.sign(61, 21, 'Рычаг (E) включает платформу. Подарок — на верхней полке.');
-    k.lever(64, 24, 'lift1');
+    k.lever(62, 24, 'lift1');                     // beside the lift (not under it)
     k.platform(64, 22, 3, 64, 13, { requires: 'lift1', speed: 60, wait: 1.2, color: '#8B6A44' });
     k.gift(87, 6, 'bonus', 'g2');
     k.clutter(['plant', 'lamp', 'book', 'bookUp', 'cup'], 70, 12, 6, 47);
     k.sign(78, 21, 'Не дотянуться до верхней полки? Порталы решают всё: пол + стена над полкой.');
-    k.funRoom(60, 24, 30, 48, 0.8);
-    k.stack('crate', 92, 24, 1);
+    k.funRoom(68, 24, 22, 48, 0.8);           // keep the lever / lift area clear
+    k.stack('crate', 80, 24, 1);
     // secret: breakable wall
     k.sign(95, 21, 'Стена с трещинами. Гравипушка + тяжёлый ящик на большой скорости — и стены нет.');
     k.gift(107, 17, 'secret', 'g3');

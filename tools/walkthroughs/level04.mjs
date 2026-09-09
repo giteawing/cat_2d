@@ -31,8 +31,11 @@ d.hold('KeyD', 60); where('on ledge?');
 walkTo(72); where('through doorway'); walkTo(78); d.step(120); where('section C floor');
 // ---- C: crate onto the high plate. Stand on the floor left of the shelf: the ceiling above the shelf is visible if we peek up.
 game.weapons.select('portal'); d.step(5);
-walkTo(78); d.step(40); d.key('KeyW'); d.step(100);
-try { aimClick(89.5 * T, 16 * T + 1, 2); } catch (e) { console.log(e.message); }
+walkTo(78); d.step(40);
+// the shelf ceiling (row 16) sits just above the top edge of the view: hold W until it has scrolled comfortably into
+// view (about 200 px down from the top), aim at it while the gun settles, fire
+d.key('KeyW'); for (let i = 0; i < 200 && game.camera.worldToScreen(0, 16 * T).y < 200; i++) d.step(1);
+for (let i = 0; i < 12; i++) { d.aimVisible(89.5 * T, 16 * T + 1); d.step(1); } d.click(2); d.step(30);
 d.releaseAll(); d.step(30);
 console.log('orange', game.portals.pair[1].active, (game.portals.pair[1].x/T).toFixed(1), (game.portals.pair[1].y/T).toFixed(1), game.portals.pair[1].ny);
 walkTo(79); d.step(90); where('before blue'); aimClick(76.5 * T, 26 * T - 1, 0); console.log('blue', (game.portals.pair[0].x/T).toFixed(1), (game.portals.pair[0].y/T).toFixed(2));
