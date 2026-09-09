@@ -28,6 +28,13 @@ export async function begin(levelIndex) {
       d.releaseAll(); d.step(5);
       return Math.abs(p.body.cx - tx * T) <= 8;
     },
+    /** walk toward a floor portal (or an edge) and let go of the key the moment the cat leaves the ground */
+    enter(tx, max = 400) {
+      const dir = tx * T > p.body.cx ? 'KeyD' : 'KeyA'; d.key(dir);
+      const y0 = p.body.bottom;
+      for (let i = 0; i < max && !(p.body.bottom > y0 + 12 || p.body.bottom < y0 - 3 * T); i++) d.step(1);   // fell (or was teleported)
+      d.step(2); d.releaseAll();
+    },
     /** walk in a direction for n frames, jumping when a wall is hit */
     walk(dir, frames, jump = true) { d.key(dir > 0 ? 'KeyD' : 'KeyA'); for (let i = 0; i < frames; i++) { d.step(1); if (jump && p.body.hitWall && p.body.onGround) d.hold('Space', 12); } d.releaseAll(); d.step(3); },
     /** a running jump: hold run+dir, jump after `lead` frames, keep holding for `air` frames */

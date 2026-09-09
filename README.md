@@ -89,4 +89,7 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
 cd .. && npm test           # 78 checks
+npm run walk                # plays all 6 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
+
+`tools/walkthroughs/levelNN.mjs` are the per-level scripts (each prints ✓/✗ per step and a final RESULT line); `lib.mjs` holds the shared helpers (walkTo, runJump, climbTo, peekAimClick, grab/dropAt/throwAt, enter…).

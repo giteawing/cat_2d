@@ -19,7 +19,7 @@ function buildMap() {
   // B: fan shaft up to a balcony; lever for door 2 is on the balcony
   m.rect(34, 12, 44, 13);                       // balcony (starts right beside the fan shaft)
   m.rect(34, 12, 44, 12, 'X');
-  m.rect(30, 14, 30, 29, 'X'); m.rect(34, 14, 34, 29, 'X');  // fan shaft walls (metal, cols 30 & 34; fan in 31-33)
+  m.rect(30, 14, 30, 27, 'X'); m.rect(34, 14, 34, 27, 'X');  // fan shaft walls (metal, cols 30 & 34; fan in 31-33); walk in under them (rows 28-29)
   m.rect(48, 1, 50, 21);                        // wall with door 2 (rows 22-29)
   m.rect(48, 21, 50, 21, 'X');
   // C: well + fling over a tall wall onto the roof
@@ -82,7 +82,7 @@ export const level06 = {
     // D
     k.sign(115, 27, 'Стена с трещинами. За ней — что-то сияет. Тяжёлое и быстрое!');
     k.prop('bigCrate', 114, 30);
-    k.gift(130, 22, 'rare', 'g4');
+    k.gift(134, 22, 'rare', 'g4');                 // above the shelf (cols 132-136): needs a jump
     k.plate(129, 30, 'door3', { label: '' });
     k.door(125, 22, 3, 8, 'door3', { dir: 'up', travel: 8 * 32 });
     k.sign(121, 27, 'Последняя дверь. Плита — за ней. Портал в потолок за решёткой (прямо над плитой) + портал в пол — и ящик сам нажмёт её.');

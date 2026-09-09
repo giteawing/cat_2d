@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node tools/serve.mjs",
     "test": "node tools/test.mjs",
-    "shots": "node tools/smoke.mjs"
+    "shots": "node tools/smoke.mjs",
+    "walk": "node tools/walkthroughs/all.mjs"
   },
   "license": "MIT"
 }
