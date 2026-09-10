@@ -134,6 +134,13 @@ export class Game {
       const n = speed > 250 ? 14 : 5;
       for (let i = 0; i < n; i++) this.effects.spawnParticle(x, y + (Math.random() - 0.5) * 40, nx * (120 + Math.random() * 260) + (Math.random() - 0.5) * 120, ny * (120 + Math.random() * 260) + (Math.random() - 0.5) * 220, 0.3 + Math.random() * 0.3, i % 3 ? '#8FE3FF' : '#FFFFFF', 2 + Math.random() * 2, 300);
       if (isCat && speed > 250) { this.player.fieldFlash = 0.3; this.player.playEmote('surprise', 0.7); this.effects.shake(3); this.input.rumble(0.5, 0.3, 90); }
+      // contextual hints (only when no other message is showing)
+      if (isCat && speed >= 100 && !this.hud.message) {
+        if (!this.player.tunnelUnlocked) this.hud.show('Электрополе', 'Сквозь него не пройти… пока', 2);
+        else if (!this.player.tunneling) this.hud.show('Электрополе', `Включи квантовый режим: ${this.btn('q')}`, 2.5);
+        else if (speed < 260) this.hud.show('Нужен разбег!', 'Беги в поле с зажатым Shift', 2.5);
+        else this.player.playEmote('confused', 0.8);
+      }
     }
   }
   onImpact(b, speed, other) {
@@ -506,7 +513,12 @@ export class Game {
       roundRect(ctx, c.x, c.y, c.w, c.h, 10); ctx.fill();
       if (sel) { ctx.strokeStyle = '#F28C4B'; ctx.lineWidth = 3; roundRect(ctx, c.x, c.y, c.w, c.h, 10); ctx.stroke(); }
       ctx.fillStyle = unlocked ? '#3A2A4A' : 'rgba(60,40,80,0.5)'; ctx.textAlign = 'left';
-      ctx.font = 'bold 13px "Trebuchet MS", sans-serif'; ctx.fillText(`${L.world}-${L.number}  ${L.name}`, c.x + 10, c.y + 18);
+      { // title: shrink the font to fit the card (long level names)
+        const title = `${L.world}-${L.number}  ${L.name}`;
+        let fs = 13; ctx.font = `bold ${fs}px "Trebuchet MS", sans-serif`;
+        while (fs > 10 && ctx.measureText(title).width > c.w - 20) { fs--; ctx.font = `bold ${fs}px "Trebuchet MS", sans-serif`; }
+        ctx.fillText(title, c.x + 10, c.y + 18);
+      }
       ctx.font = '11px "Trebuchet MS", sans-serif'; ctx.fillStyle = unlocked ? '#5A4A6A' : 'rgba(60,40,80,0.5)';
       { // subtitle, clipped to the card
         let sub = unlocked ? (L.subtitle || '') : 'Заблокировано';
