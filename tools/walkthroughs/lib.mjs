@@ -10,11 +10,12 @@ export async function begin(levelIndex) {
   d.startLevel(levelIndex); d.step(60);
   const p = d.p;
   const log = [];
+  const t0 = Date.now();
   const w = {
     game, d, p, log,
     fails: 0,
     where(label) { const s = `${label}: x ${(p.body.cx / T).toFixed(1)} y ${(p.body.bottom / T).toFixed(1)} ground ${p.body.onGround} gifts ${game.giftsCollected}`; console.log(s); return s; },
-    expect(cond, msg) { if (!cond) { w.fails++; console.log('  ✗ ' + msg); } else console.log('  ✓ ' + msg); return cond; },
+    expect(cond, msg) { const t = ((Date.now() - t0) / 1000).toFixed(0) + 's'; if (!cond) { w.fails++; console.log(`  ✗ ${msg}  [${t}]`); } else console.log(`  ✓ ${msg}  [${t}]`); return cond; },
     /** walk (and auto-jump at walls) until the cat's centre is within 6 px of tile x */
     walkTo(tx, max = 900, run = false) {
       let n = 0, dir = null;

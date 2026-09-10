@@ -1,4 +1,4 @@
-// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan.
+// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate.
 // Components communicate through named "channels": an activator sets channel[name] = true/false,
 // and receivers read the channel each frame. Multiple activators can be AND-ed by a door.
 import { TILE, clamp, lerp } from '../core/util.js';
@@ -263,5 +263,51 @@ export class Fan {
       ctx.restore();
     }
     if (this.on) { ctx.fillStyle = 'rgba(180,220,255,0.10)'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+  }
+}
+
+/**
+ * FieldGate: an electric field that can be switched off. The field is ON while its requirement is NOT met
+ * (a plate/lever/button powers it down); `inverted` flips that. Implemented by writing EFIELD/EMPTY tiles into the
+ * map, so the physics (bounce / tunneling / portal shots pass) is exactly that of a built-in field.
+ * Safety: the field never re-forms while something is standing inside it.
+ */
+export class FieldGate {
+  constructor(tx, ty, wTiles, hTiles, requires, opts = {}) {
+    this.tx = tx; this.ty = ty; this.wT = wTiles; this.hT = hTiles;
+    this.x = tx * TILE; this.y = ty * TILE; this.w = wTiles * TILE; this.h = hTiles * TILE;
+    this.requires = requires; this.inverted = !!opts.inverted;
+    this.on = null;           // unknown until the first update (forces the initial tile write)
+    this.t = 1;               // visual 0..1 (fade)
+  }
+  wantOn(game) { const powered = game.channels.test(this.requires); return this.inverted ? powered : !powered; }
+  update(dt, game) {
+    let want = this.wantOn(game);
+    if (want && this.on === false) {
+      const blocked = game.world.query(this.x - 2, this.y - 2, this.w + 4, this.h + 4, (b) => !b.dead && b.type !== BodyType.KINEMATIC);
+      if (blocked.length) want = false;      // wait until the passage is clear
+    }
+    if (want !== this.on) {
+      const first = this.on === null;
+      this.on = want;
+      for (let cy = this.ty; cy < this.ty + this.hT; cy++) for (let cx = this.tx; cx < this.tx + this.wT; cx++) game.map.set(cx, cy, want ? T.EFIELD : T.EMPTY);
+      game.tiles.build();
+      if (!first) game.sfx(want ? 'fieldOn' : 'fieldOff');
+    }
+    this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 10));
+  }
+  draw(ctx, time) {
+    // emitter caps stay visible when the field is down (so the player knows where the gate is) + a status lamp
+    const vertical = this.hT >= this.wT;
+    ctx.save();
+    ctx.fillStyle = '#2F3742';
+    if (vertical) { ctx.fillRect(this.x + 2, this.y - 6, this.w - 4, 8); ctx.fillRect(this.x + 2, this.y + this.h - 2, this.w - 4, 8); }
+    else { ctx.fillRect(this.x - 6, this.y + 2, 8, this.h - 4); ctx.fillRect(this.x + this.w - 2, this.y + 2, 8, this.h - 4); }
+    const lamp = this.on ? `rgba(120,215,255,${0.7 + 0.3 * Math.sin(time * 9)})` : 'rgba(90,110,120,0.8)';
+    ctx.fillStyle = lamp;
+    if (vertical) { ctx.fillRect(this.x + this.w / 2 - 3, this.y - 5, 6, 3); ctx.fillRect(this.x + this.w / 2 - 3, this.y + this.h + 2, 6, 3); }
+    else { ctx.fillRect(this.x - 5, this.y + this.h / 2 - 3, 3, 6); ctx.fillRect(this.x + this.w + 2, this.y + this.h / 2 - 3, 3, 6); }
+    if (!this.on && this.t > 0.02) { ctx.globalAlpha = this.t * 0.35; ctx.fillStyle = '#8FE3FF'; ctx.fillRect(this.x + 8, this.y, this.w - 16, this.h); }   // fading afterglow
+    ctx.restore();
   }
 }

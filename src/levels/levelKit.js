@@ -1,7 +1,7 @@
 // Helpers used by level definitions to build content in tile units.
 import { TILE } from '../core/util.js';
 import { makeProp, scatter, PROPS } from '../physics/props.js';
-import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan } from '../puzzles/puzzles.js';
+import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate } from '../puzzles/puzzles.js';
 import { Gift } from '../gifts/gift.js';
 
 export const px = (t) => t * TILE;
@@ -50,6 +50,8 @@ export class LevelKit {
   door(tx, ty, wTiles, hTiles, requires, opts = {}) { const d = new Door(px(tx), px(ty), px(wTiles), px(hTiles), requires, opts); this.game.puzzles.push(d); this.game.world.add(d.body); return d; }
   platform(tx, ty, wTiles, tx2, ty2, opts = {}) { const p = new MovingPlatform(px(tx), px(ty), px(wTiles), opts.h || 12, px(tx2), px(ty2), opts); this.game.puzzles.push(p); this.game.world.add(p.body); return p; }
   trigger(tx, ty, w, h, fn, opts = {}) { const t = new Trigger(px(tx), px(ty), px(w), px(h), fn, opts); this.game.puzzles.push(t); return t; }
+  /** Switchable electric field: ON while `requires` is not met (default) — a plate/lever/button switches it off. */
+  fieldGate(tx, ty, w, h, requires, opts = {}) { const f = new FieldGate(tx, ty, w, h, requires, opts); this.game.puzzles.push(f); return f; }
   fan(tx, ty, w, h, opts = {}) { const f = new Fan(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(f); return f; }
 
   gift(tx, ty, type = 'normal', id = null) {
