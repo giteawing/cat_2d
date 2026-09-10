@@ -94,7 +94,7 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 78 checks
+cd .. && npm test           # 93 checks
 npm run walk                # plays all 7 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
