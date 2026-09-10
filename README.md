@@ -70,7 +70,11 @@ tools/
   harness.mjs  headless game (node + @napi-rs/canvas): Driver with key/mouse/aim/click/step/shot
   test.mjs     automated tests (physics, portals, weapons, level 1 playthrough, all-level sanity)
   smoke.mjs    screenshot pass
+  catsheet.mjs cat pose sheets → tools/out/catsheet.png, catbig.png, catidle.png
+  walkthroughs/ real-input playthroughs of every level (npm run walk)
 ```
+
+Cat idle flourishes (after a few seconds standing still): look around, stretch/yawn, sniff, tail flick, groom, look at the gun, sit down — and, every second sit-down, a 5-second "smoke break" where the cat blows little smoke rings shaped like cat faces.
 
 ### Tile characters (maps)
 

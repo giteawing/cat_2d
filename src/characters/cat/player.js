@@ -244,9 +244,10 @@ export class Player {
         const opts = ['lookAround', 'stretch', 'sniff', 'tailFlick', 'groom'];
         if (this.weapon && this.weapon.current) opts.push('lookGun');
         this.idleFlourishes = (this.idleFlourishes || 0) + 1;
-        // after a few flourishes the cat sits down for a while
-        this.idleVariant = this.idleFlourishes % 4 === 0 ? 'sit' : opts[Math.floor(Math.random() * opts.length)];
-        this.idleVariantTimer = { stretch: 1.6, groom: 2.2, sit: 2.6 }[this.idleVariant] || 1.2;
+        // after a few flourishes the cat sits down for a while; every other sit-down it takes a "smoke break"
+        // (blows little cat-face smoke rings)
+        this.idleVariant = this.idleFlourishes % 4 === 0 ? (this.idleFlourishes % 8 === 0 ? 'smoke' : 'sit') : opts[Math.floor(Math.random() * opts.length)];
+        this.idleVariantTimer = { stretch: 1.6, groom: 2.2, sit: 2.6, smoke: 5.0 }[this.idleVariant] || 1.2;
       }
     } else { this.idleTime = 0; this.idleVariant = null; this.idleFlourishes = 0; }
   }

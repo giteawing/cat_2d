@@ -28,7 +28,16 @@ for (const [j,wk] of [[0,null],[1,'gravity'],[2,'portal']]) {
   drawCat(b, p, 0.3, wk ? {kind:wk, swapT:1, recoil:0, charge:0.5, holding:false, lastColor:'orange', localAngle:-0.1} : null);
   b.restore();
 }
+// idle flourishes sheet (sit, groom, stretch, smoke at several moments)
+const fl = [['sit',1.0],['groom',1.0],['stretch',0.8],['smoke',4.2],['smoke',3.2],['smoke',1.8]];
+const fc = createCanvas(cw*6, ch); const f = fc.getContext('2d'); f.fillStyle='#EFD2A6'; f.fillRect(0,0,fc.width,fc.height);
+fl.forEach(([v, timer], j) => {
+  const p = { anim:'idle', animTime:0, body:{cx:0,bottom:0,vx:0,vy:0}, facing:1, aimX:1, aimY:0, squash:1, stretch:1, crouching:false, blink:0, idleVariant:v, idleVariantTimer:timer, weapon:null };
+  f.save(); f.translate(j*cw+cw/2, ch-16); f.scale(S,S); drawCat(f, p, 0.9 + j, null); f.restore();
+  f.fillStyle='#000'; f.font='14px sans-serif'; f.fillText(`${v} (${timer}s left)`, j*cw+6, 16);
+});
 fs.mkdirSync('tools/out',{recursive:true});
+fs.writeFileSync('tools/out/catidle.png', fc.toBuffer('image/png'));
 fs.writeFileSync('tools/out/catsheet.png', c.toBuffer('image/png'));
 fs.writeFileSync('tools/out/catbig.png', big.toBuffer('image/png'));
 console.log('ok');

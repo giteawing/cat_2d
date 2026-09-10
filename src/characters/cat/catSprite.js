@@ -41,7 +41,7 @@ export function computePose(p, time) {
     earFlick: 0, eyeOpen: 1, browRaise: 0, mouth: 'smile', pupilX: 0, pupilY: 0,
     armFront: 0, armBack: 0, armsUp: 0, // 0..1 arms raised (jump/fall)
     squashX: p.squash, squashY: p.stretch, crouch: p.crouching ? 1 : 0, climb: 0,
-    blush: 0, sweat: 0, sparkle: 0, question: 0, exclaim: 0, groom: 0,
+    blush: 0, sweat: 0, sparkle: 0, question: 0, exclaim: 0, groom: 0, smoke: 0,
   };
   const vx = Math.abs(p.body.vx);
   switch (anim) {
@@ -61,6 +61,16 @@ export function computePose(p, time) {
         const s = wave(time, 3.2);
         pose.armFront = -1.9 + s * 0.25; pose.groom = 1 + s; pose.headTilt = 0.22 + s * 0.05; pose.headY = 3 + s * 0.8; pose.headX = 1;
         pose.eyeOpen = 0.15; pose.mouth = 'small'; pose.pupilY = 2; pose.blush = 0.4;
+      }
+      if (p.idleVariant === 'smoke') {   // sits back with a "cigarette" and blows smoke rings shaped like little cat faces
+        const total = 5.0, el = total - p.idleVariantTimer;           // elapsed seconds
+        const s = smoothstep(clamp(el * 2, 0, 1)) * smoothstep(clamp((p.idleVariantTimer) * 2, 0, 1));   // ease in / out
+        pose.crouch = Math.max(pose.crouch, s * 0.5); pose.bodyTilt = -0.1 * s; pose.headY = 2 * s; pose.headTilt = -0.1 * s;
+        pose.tailAngle = -0.9 + 1.5 * s; pose.tailCurl = 1.0 + 0.7 * s; pose.tailWag = wave(time, 0.35) * 0.12;
+        const cyc = (el - 0.6) % 1.4;                                   // one puff every 1.4 s
+        const puffing = el > 0.6 && cyc < 0.45;
+        pose.eyeOpen = 1 - 0.55 * s; pose.mouth = puffing ? 'o' : 'small'; pose.pupilY = 1; pose.pupilX = -1;
+        pose.smoke = s > 0.05 ? { el, s, puffing } : 0;
       }
       if (p.idleVariant === 'sit') {     // settles down: lower body, tail wrapped around the paws, slow blink
         const s = smoothstep(clamp((2.6 - p.idleVariantTimer) * 1.5, 0, 1));
@@ -219,6 +229,7 @@ export function drawCatLocal(ctx, pose, p, time, weaponView, facing = 1) {
     const g = pose.groom - 1; // -1..1 oscillation
     drawArmTo(ctx, -3, bodyCY - 4, headCX + 6 + g * 2, headCY + 6 + g * 3, false);
   }
+  if (pose.smoke) drawSmokeBreak(ctx, pose, headCX, headCY, headR, bodyCY, time);
 
   // ---------- arms & gun (in front of body) ----------
   if (gunHeld) {
@@ -263,6 +274,69 @@ export function drawCatLocal(ctx, pose, p, time, weaponView, facing = 1) {
     ctx.fillStyle = '#8CD3F5';
     const sy = headCY - 6 + ((time * 40) % 12);
     ctx.beginPath(); ctx.ellipse(headCX - headR - 2, sy, 2.2, 3.2, 0, 0, TAU); ctx.fill();
+  }
+}
+
+/** Idle flourish: the paw holds a little "cigarette" up to the mouth; smoke rings shaped like cat faces float away. */
+function drawSmokeBreak(ctx, pose, headCX, headCY, headR, bodyCY, time) {
+  const { el, s, puffing } = pose.smoke;
+  const r = headR;
+  // mouth position (head local → body local; the head tilt is small enough to ignore)
+  const mouthX = headCX + r * 0.34 + r * 0.05, mouthY = headCY + r * 0.32 - r * 0.16 + 4;
+  // paw: raised from the front shoulder to just below / in front of the mouth (so the mouth stays visible);
+  // it dips a little between puffs
+  const bob = puffing ? 0 : 3;
+  const tx = mouthX + 7, ty = mouthY + 9 + bob;
+  const px = 6 + (tx - 6) * s, py = bodyCY - 3 + (ty - (bodyCY - 3)) * s;
+  drawArmTo(ctx, 6, bodyCY - 3, px, py, false);
+  if (s > 0.6) {
+    // the cigarette: held between the toes, pointing up-left toward the mouth; glowing tip with a thin wisp
+    const ang = Math.atan2(mouthY - py, mouthX - px);
+    ctx.save();
+    ctx.translate(px + Math.cos(ang) * 3, py + Math.sin(ang) * 3);
+    ctx.rotate(ang);
+    ctx.fillStyle = '#FFFDF6'; roundRect(ctx, 0, -1.4, 10, 2.8, 1.2); ctx.fill();
+    ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.35; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#D9A066'; ctx.fillRect(0, -1.4, 2, 2.8);
+    const glow = puffing ? 1 : 0.55 + 0.25 * Math.sin(time * 6);
+    ctx.fillStyle = `rgba(255,${120 + 80 * glow | 0},50,1)`; ctx.beginPath(); ctx.arc(10, 0, 1.7, 0, TAU); ctx.fill();
+    ctx.restore();
+    // wisp rising from the tip
+    const tipX = px + Math.cos(ang) * 13, tipY = py + Math.sin(ang) * 13;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.quadraticCurveTo(tipX + 2 + Math.sin(time * 3) * 2, tipY - 7, tipX - 1 + Math.sin(time * 2.2) * 2, tipY - 14); ctx.stroke();
+  }
+  // smoke rings: one per puff, drifting up and forward, growing and fading; each is a tiny cat face
+  for (let k = 0; k < 4; k++) {
+    const born = 0.6 + k * 1.4 + 0.3;
+    const age = el - born;
+    if (age < 0 || age > 2.4) continue;
+    const a = Math.min(1, age * 4) * (1 - age / 2.4) * 0.95;
+    const rr = 3 + age * 5;
+    const x = mouthX + 5 + age * 9 + Math.sin(age * 3 + k) * 2, y = mouthY - 6 - age * 24;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.8 + age * 0.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    // face outline with two ears
+    ctx.arc(x, y, rr, Math.PI * 1.15, Math.PI * 1.85, true);                 // bottom & sides (drawn the long way round)
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(Math.PI * 1.85) * rr, y + Math.sin(Math.PI * 1.85) * rr);
+    ctx.lineTo(x + rr * 0.95, y - rr * 1.35);                                 // right ear tip
+    ctx.lineTo(x + rr * 0.35, y - rr * 0.98);
+    ctx.lineTo(x - rr * 0.35, y - rr * 0.98);
+    ctx.lineTo(x - rr * 0.95, y - rr * 1.35);                                 // left ear tip
+    ctx.lineTo(x + Math.cos(Math.PI * 1.15) * rr, y + Math.sin(Math.PI * 1.15) * rr);
+    ctx.stroke();
+    // eyes & nose appear as the ring grows
+    if (rr > 4.5) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(x - rr * 0.35, y - rr * 0.1, 1.2, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + rr * 0.35, y - rr * 0.1, 1.2, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x - 1.2, y + rr * 0.3); ctx.lineTo(x + 1.2, y + rr * 0.3); ctx.lineTo(x, y + rr * 0.3 + 1.6); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
