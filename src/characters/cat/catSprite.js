@@ -147,6 +147,27 @@ export function computePose(p, time) {
     case 'portalExit': pose.eyeOpen = 1.2; pose.mouth = 'o'; pose.earFlick = 0.3; pose.sparkle = 1; break;
     case 'portalEnter': pose.eyeOpen = 1.1; pose.mouth = 'open'; break;
   }
+  // ---- weapon reactions layered on top (Shoot GG / Shoot PG / Hold object / Pull) ----
+  const wv = p.weapon && p.weapon.view ? p.weapon.view() : null;
+  if (wv && !p.emote) {
+    const grounded = anim === 'idle' || anim === 'walk' || anim === 'run' || anim === 'crouch' || anim === 'land';
+    if (wv.recoil > 0) {                       // shot kick: lean back, ears back, squint, tail snaps up
+      const k = wv.recoil;
+      pose.bodyTilt -= 0.14 * k; pose.headTilt -= 0.1 * k; pose.headX -= 2 * k; pose.earFlick -= 0.35 * k;
+      pose.eyeOpen = Math.min(pose.eyeOpen, 1 - 0.35 * k); pose.tailAngle -= 0.5 * k; pose.tailCurl -= 0.3 * k;
+      if (wv.kind === 'portal' && k > 0.6) pose.mouth = 'o';
+      if (wv.kind === 'gravity' && k > 0.6) pose.mouth = 'grit';
+    } else if (wv.holding && wv.charge < 0.75) {   // pulling an object in: braced stance, focused squint
+      pose.eyeOpen = Math.min(pose.eyeOpen, 0.7); pose.mouth = 'small'; pose.browRaise = -0.5;
+      pose.bodyTilt += 0.06; pose.headTilt += 0.04; pose.pupilX = p.aimX * 2; pose.pupilY = p.aimY * 1.6;
+      if (grounded) { pose.legSpread = 1; pose.crouch = Math.max(pose.crouch, 0.15); }
+    } else if (wv.holding) {                   // holding an object: wide stance, satisfied look, tail swaying with the load
+      pose.mouth = anim === 'run' ? 'open' : 'smile'; pose.browRaise = 0.3;
+      pose.bodyTilt -= 0.05; pose.pupilX = p.aimX * 1.5; pose.pupilY = p.aimY * 1.2;
+      pose.tailWag += wave(time, 0.9) * 0.2;
+      if (grounded) pose.legSpread = 1;
+    }
+  }
   if (p.blink > 0) pose.eyeOpen = 0.05;
   if (p.crouching) pose.crouch = Math.max(pose.crouch, 1);
   return pose;
@@ -373,8 +394,8 @@ function drawLeg(ctx, x, y, len, swing, pose, far) {
   const s = pose.climb ? swing * 0.5 : swing;
   const lift = pose.legLift ? Math.max(0, -Math.cos(s + Math.PI / 2)) * 4 : 0;
   ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(s * 0.9);
+  ctx.translate(x + (pose.legSpread ? (far ? -3 : 3) : 0), y);   // spread: feet planted wider apart
+  ctx.rotate(s * 0.9 + (pose.legSpread ? (far ? 0.12 : -0.12) : 0));
   const l = len - lift + (pose.legSpread ? 1 : 0);
   ctx.fillStyle = far ? CAT.furDark : CAT.fur;
   ctx.strokeStyle = CAT.outline; ctx.lineWidth = 1.4; ctx.globalAlpha = 1;
