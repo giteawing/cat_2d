@@ -22,6 +22,7 @@ Open `index.html` through the server (ES modules need http).
 |---|---|
 | A / D, ← / → | walk |
 | Shift | run |
+| Q (or F) | toggle Quantum Tunneling mode (once picked up, level 7+): run into an electric field → 25% chance to pass through, otherwise an elastic bounce. The cat gets a glowing blue outline while the mode is on |
 | Space | jump (variable height, coyote time, jump buffer) |
 | W / ↑ | climb ladder / look up |
 | S / ↓ | crouch / climb down / look down; S + Space drops through thin platforms |
@@ -40,7 +41,7 @@ Open `index.html` through the server (ES modules need http).
 RT / LT — primary / secondary fire, right stick — aim (a cursor orbits the cat's paws), Start — pause, Back — restart.
 Hints switch to gamepad labels automatically; rumble on throws, portals, gifts and smashes where supported.
 
-## World 1 (6 levels)
+## World 1 (7 levels)
 
 1. **Уютный дом** — movement, ladders, props, Gravity Gun.
 2. **Первый портал** — portal as a door, floor→ceiling travel, crate onto a plate.
@@ -48,6 +49,7 @@ Hints switch to gamepad labels automatically; rumble on throws, portals, gifts a
 4. **Подвал** (lab) — momentum flings, thrown-object button, fan, ceiling delivery.
 5. **Оранжерея** (garden) — two-plate AND door, chasm crossing, lift with a mid-ride shot, perch fling.
 6. **Чердак** — finale combining everything.
+7. **Квантовая лаборатория** — electric fields (`~` tiles: thin floor-to-ceiling walls, a field floor and a field ceiling) and the Quantum Tunneling mode (Q): 25% chance to run through a field, elastic bounce otherwise. Objects always bounce; portal shots pass through fields.
 
 Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
 
@@ -83,7 +85,7 @@ Cat idle flourishes (after a few seconds standing still): look around, stretch/y
 
 ### Adding a level
 
-Create `src/levels/world01/level07.js` (see existing ones: `buildMap()` with `MapBuilder`, then a `setup(k)` using the
+Create `src/levels/world01/level08.js` (see existing ones: `buildMap()` with `MapBuilder`, then a `setup(k)` using the
 level kit: `k.prop`, `k.plate`, `k.door`, `k.lever`, `k.button`, `k.platform`, `k.fan`, `k.gift`, `k.secret`, `k.sign`,
 `k.message`, `k.funRoom`, `k.stack`, `k.decor`) and register it in `src/levels/index.js`.
 Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b')` (also `a|b`, `!a`).
@@ -93,7 +95,7 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
 cd .. && npm test           # 78 checks
-npm run walk                # plays all 6 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
+npm run walk                # plays all 7 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
 `tools/walkthroughs/levelNN.mjs` are the per-level scripts (each prints ✓/✗ per step and a final RESULT line); `lib.mjs` holds the shared helpers (walkTo, runJump, climbTo, peekAimClick, grab/dropAt/throwAt, enter…).

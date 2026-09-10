@@ -35,6 +35,7 @@ export class TileRenderer {
         else if (t === T.GLASS) drawGlass(ctx, x, y, th);
         else if (t === T.GRATE) drawGrate(ctx, x, y, th);
         else if (t === T.BREAKABLE) drawBreakable(ctx, x, y, th, cx, cy, map);
+        else if (t === T.EFIELD) drawFieldEmitters(ctx, x, y, th, cx, cy, map);
       }
     }
     this.canvas = c;
@@ -84,6 +85,73 @@ export class TileRenderer {
     ctx.drawImage(this.canvas, cam.x, cam.y, w, h, cam.x, cam.y, w, h);
   }
 }
+
+/** Static part of an electric field tile: emitter caps where the field meets a solid wall/floor/ceiling. */
+function drawFieldEmitters(ctx, x, y, th, cx, cy, map) {
+  const cap = (nx, ny) => {
+    ctx.fillStyle = th.metalDark;
+    if (ny < 0) ctx.fillRect(x + 2, y, TILE - 4, 6); else if (ny > 0) ctx.fillRect(x + 2, y + TILE - 6, TILE - 4, 6);
+    else if (nx < 0) ctx.fillRect(x, y + 2, 6, TILE - 4); else ctx.fillRect(x + TILE - 6, y + 2, 6, TILE - 4);
+    ctx.fillStyle = '#7FD3FF';
+    if (ny < 0) ctx.fillRect(x + 8, y + 2, TILE - 16, 2); else if (ny > 0) ctx.fillRect(x + 8, y + TILE - 4, TILE - 16, 2);
+    else if (nx < 0) ctx.fillRect(x + 2, y + 8, 2, TILE - 16); else ctx.fillRect(x + TILE - 4, y + 8, 2, TILE - 16);
+  };
+  const solidNotField = (a, b) => { const t = map.get(a, b); return map.isSolid(t) && t !== T.EFIELD; };
+  if (solidNotField(cx, cy - 1)) cap(0, -1);
+  if (solidNotField(cx, cy + 1)) cap(0, 1);
+  if (solidNotField(cx - 1, cy)) cap(-1, 0);
+  if (solidNotField(cx + 1, cy)) cap(1, 0);
+}
+
+/** Animated electric-field glow and arcs. Drawn every frame over the tile cache for field tiles in view. */
+export function drawFields(ctx, map, cam, time) {
+  const x0 = Math.max(0, Math.floor(cam.x / TILE) - 1), x1 = Math.min(map.cols - 1, Math.floor((cam.x + cam.w) / TILE) + 1);
+  const y0 = Math.max(0, Math.floor(cam.y / TILE) - 1), y1 = Math.min(map.rows - 1, Math.floor((cam.y + cam.h) / TILE) + 1);
+  let any = false;
+  for (let cy = y0; cy <= y1 && !any; cy++) for (let cx = x0; cx <= x1; cx++) if (map.get(cx, cy) === T.EFIELD) { any = true; break; }
+  if (!any) return;
+  ctx.save();
+  const pulse = 0.75 + 0.25 * Math.sin(time * 9);
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      if (map.get(cx, cy) !== T.EFIELD) continue;
+      const x = cx * TILE, y = cy * TILE;
+      const f = (a, b) => (map.get(a, b) === T.EFIELD ? 1 : 0);
+      const vertical = f(cx, cy - 1) + f(cx, cy + 1) >= f(cx - 1, cy) + f(cx + 1, cy);   // arcs run along the field's long axis
+      // translucent glow body
+      ctx.fillStyle = `rgba(110,200,255,${0.16 + 0.08 * pulse})`;
+      if (vertical) ctx.fillRect(x + 6, y, TILE - 12, TILE); else ctx.fillRect(x, y + 6, TILE, TILE - 12);
+      ctx.fillStyle = `rgba(200,240,255,${0.10 + 0.08 * pulse})`;
+      if (vertical) ctx.fillRect(x + 12, y, TILE - 24, TILE); else ctx.fillRect(x, y + 12, TILE, TILE - 24);
+      // crackling arcs (pseudo-random per tile & time slice)
+      const seed = (cx * 73 + cy * 151) % 97;
+      const tslice = Math.floor(time * 14);
+      ctx.lineWidth = 1.5;
+      for (let k = 0; k < 2; k++) {
+        const r = hash(seed + k * 31 + tslice * 7);
+        ctx.strokeStyle = k ? 'rgba(255,255,255,0.85)' : 'rgba(120,215,255,0.9)';
+        ctx.beginPath();
+        if (vertical) {
+          const bx = x + TILE / 2;
+          ctx.moveTo(bx + (r - 0.5) * 10, y);
+          for (let i = 1; i <= 4; i++) { const rr = hash(seed + k * 13 + tslice * 3 + i * 17); ctx.lineTo(bx + (rr - 0.5) * 16, y + i * TILE / 4); }
+        } else {
+          const by = y + TILE / 2;
+          ctx.moveTo(x, by + (r - 0.5) * 10);
+          for (let i = 1; i <= 4; i++) { const rr = hash(seed + k * 13 + tslice * 3 + i * 17); ctx.lineTo(x + i * TILE / 4, by + (rr - 0.5) * 16); }
+        }
+        ctx.stroke();
+      }
+      // drifting sparks
+      const sp = hash(seed + tslice * 5);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      if (vertical) ctx.fillRect(x + TILE / 2 - 1 + (sp - 0.5) * 12, y + ((time * 60 + seed * 3) % TILE), 2, 2);
+      else ctx.fillRect(x + ((time * 60 + seed * 3) % TILE), y + TILE / 2 - 1 + (sp - 0.5) * 12, 2, 2);
+    }
+  }
+  ctx.restore();
+}
+function hash(n) { const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); }
 
 function drawBrick(ctx, x, y, th, cx, cy, map) {
   ctx.fillStyle = th.brick; ctx.fillRect(x, y, TILE, TILE);

@@ -210,7 +210,7 @@ const R = [
   const { LEVELS } = await import('../src/levels/index.js');
   const { game, canvas } = await createGame();
   const d = new Driver(game, canvas);
-  check('world 1 has 6 levels', LEVELS.length === 6, `n=${LEVELS.length}`);
+  check('world 1 has 7 levels', LEVELS.length === 7, `n=${LEVELS.length}`);
   for (let i = 0; i < LEVELS.length; i++) {
     const L = LEVELS[i];
     d.startLevel(i); d.step(30);

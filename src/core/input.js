@@ -97,6 +97,7 @@ export class Input {
       jumpPressed: this.wasPressed('Space') || pp(0),
       run: this.down('ShiftLeft') || this.down('ShiftRight') || pd(2),
       interactPressed: this.wasPressed('KeyE') || pp(1) || pp(3),
+      tunnelPressed: this.wasPressed('KeyQ') || this.wasPressed('KeyF') || pp(2 + 8),   // Q / F / gamepad L3
       key1: this.wasPressed('Digit1') || pp(4), key2: this.wasPressed('Digit2') || pp(5),
       lmbPressed: this.lmbPressed || pp(7), rmbPressed: this.rmbPressed || pp(6), lmb: this.lmb || pd(7), rmb: this.rmb || pd(6),
       wheel: this.wheel,

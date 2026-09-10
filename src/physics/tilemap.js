@@ -12,6 +12,8 @@ export const T = {
   DECOR_BG: 6,     // background decoration (non-solid)
   GRATE: 7,        // solid metal grate: blocks bodies, but portal shots pass through
   BREAKABLE: 8,    // cracked bricks: shatter when hit by a heavy/fast object
+  EFIELD: 9,       // electric field: blocks bodies (elastic bounce), portal shots pass through; a cat in quantum
+                   // tunneling mode running into it passes through with 25% probability
 };
 
 export const TILE_CHARS = {
@@ -22,6 +24,7 @@ export const TILE_CHARS = {
   'G': T.GLASS,
   '|': T.GRATE,
   'B': T.BREAKABLE,
+  '~': T.EFIELD,
   '.': T.EMPTY,
   ' ': T.EMPTY,
 };
@@ -60,7 +63,8 @@ export class TileMap {
     this.data[cy * this.cols + cx] = t;
   }
 
-  isSolid(t) { return t === T.SOLID || t === T.METAL || t === T.GLASS || t === T.GRATE || t === T.BREAKABLE; }
+  isSolid(t) { return t === T.SOLID || t === T.METAL || t === T.GLASS || t === T.GRATE || t === T.BREAKABLE || t === T.EFIELD; }
+  isField(t) { return t === T.EFIELD; }
   /** Does this tile stop a portal shot? (grates let shots through) */
   blocksShot(t) { return t === T.SOLID || t === T.METAL || t === T.GLASS || t === T.BREAKABLE; }
   isBreakable(t) { return t === T.BREAKABLE; }
@@ -73,6 +77,19 @@ export class TileMap {
       if (seen.has(k)) continue; seen.add(k);
       if (!this.isBreakable(this.get(x, y))) continue;
       out.push([x, y]);
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    return out;
+  }
+  /** Flood-fill all connected electric-field tiles (one "field wall"); returns a Set of tile indices. */
+  connectedField(cx, cy, limit = 160) {
+    const out = new Set(), stack = [[cx, cy]];
+    while (stack.length && out.size < limit) {
+      const [x, y] = stack.pop();
+      if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) continue;
+      const k = y * this.cols + x;
+      if (out.has(k) || !this.isField(this.data[k])) continue;
+      out.add(k);
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
     }
     return out;

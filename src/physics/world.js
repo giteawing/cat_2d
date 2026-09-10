@@ -8,6 +8,10 @@ const SUBSTEPS = 3;
 const EPS = 0.01;
 const SKIN = 0.001;
 export const BREAK_MOMENTUM = 3000;
+export const TUNNEL_MIN_SPEED = 260;   // a body must hit an electric field at least this fast to attempt tunneling (run-up)
+export const TUNNEL_CHANCE = 0.25;     // probability of passing through per attempt
+const FIELD_BOUNCE = 0.9;              // elastic bounce off an electric field wall
+const FIELD_BOUNCE_Y = 0.8;            // a field floor/ceiling is a slightly softer trampoline (settles sooner)
 
 export class World {
   constructor(map) {
@@ -19,6 +23,61 @@ export class World {
     this.time = 0;
     this.gravity = GRAVITY;
     this.frameIgnore = new Map(); // body.id -> Set of tile indices (portal apertures)
+    this.onField = null;          // (body, 'pass'|'bounce', x, y, nx, ny) callback: electric-field contact
+    this.rng = Math.random;       // tunneling dice (replaceable for deterministic tests)
+  }
+
+  /** Recompute which tiles a body may ignore this substep: portal apertures + an electric field it is tunneling through. */
+  refreshIgnore(b) {
+    let ig = this.portals ? this.portals.ignoreTilesFor(b) : null;
+    if (b.fieldPass) {
+      // still inside the field wall? (the pass ends once the body has fully left the field tiles)
+      const map = this.map;
+      const x0 = Math.floor(b.x / TILE), x1 = Math.floor((b.right - 0.001) / TILE);
+      const y0 = Math.floor(b.y / TILE), y1 = Math.floor((b.bottom - 0.001) / TILE);
+      let inside = false;
+      for (let cy = y0; cy <= y1 && !inside; cy++) for (let cx = x0; cx <= x1; cx++) if (b.fieldPass.has(cy * map.cols + cx)) { inside = true; break; }
+      if (!inside) b.fieldPass = null;
+      else { ig = ig ? new Set(ig) : new Set(); for (const t of b.fieldPass) ig.add(t); }
+    }
+    if (ig) this.frameIgnore.set(b.id, ig); else this.frameIgnore.delete(b.id);
+    return ig;
+  }
+
+  /**
+   * A body has just run into an electric-field tile. Returns true if it tunnels through (the field's tiles are
+   * added to the body's ignore set), false if it bounces (velocity already reflected).
+   * axis: 'x' | 'y'; vel: the body's velocity along that axis before contact.
+   */
+  hitField(b, cx, cy, axis, vel) {
+    const speed = Math.abs(vel);
+    const nx = axis === 'x' ? -Math.sign(vel) : 0, ny = axis === 'y' ? -Math.sign(vel) : 0;
+    const px = axis === 'x' ? (vel > 0 ? cx * TILE : (cx + 1) * TILE) : b.cx;
+    const py = axis === 'y' ? (vel > 0 ? cy * TILE : (cy + 1) * TILE) : b.cy;
+    if (b.tunneling && speed >= TUNNEL_MIN_SPEED && b.fieldCooldown <= 0) {
+      b.fieldCooldown = 0.35;
+      if (this.rng() < (b.tunnelChance ?? TUNNEL_CHANCE)) {
+        b.fieldPass = this.map.connectedField(cx, cy);
+        b.fieldCooldown = 2.5;      // "quantum recharge": no tunneling straight back through the same field
+        this.refreshIgnore(b);
+        if (this.onField) this.onField(b, 'pass', px, py, nx, ny);
+        return true;
+      }
+    }
+    // elastic bounce when hit fast; a mild pushback when merely walking into it; a slow vertical contact settles
+    // (so a field floor can be walked across carefully — only a real fall bounces)
+    const fast = speed >= TUNNEL_MIN_SPEED;
+    // walls and ceilings always kick the body away at least at attempt speed, so a run-up (or a fan pushing up) can
+    // bring it back in for another try; a floor bounces proportionally so the body settles on it
+    const ceiling = axis === 'y' && vel < 0;
+    let out = fast ? speed * (axis === 'y' ? FIELD_BOUNCE_Y : FIELD_BOUNCE) : speed < 150 ? 0 : Math.min(speed * 0.5, 90);
+    if ((axis === 'x' && fast) || (ceiling && speed >= 60)) out = Math.max(out, TUNNEL_MIN_SPEED * 1.3);
+    if (axis === 'x') { b.vx = -Math.sign(vel) * Math.max(out, speed >= 60 ? 90 : 0); if (fast && b.onGround) b.vy = Math.min(b.vy, -170); }
+    else b.vy = -Math.sign(vel) * out;
+    if (axis === 'x' && speed >= 120) b.knockback = fast ? 0.35 : 0.12;
+    b.wake();
+    if (this.onField && speed >= 40) this.onField(b, 'bounce', px, py, nx, ny, speed);
+    return false;
   }
 
   add(body) { this.bodies.push(body); return body; }
@@ -72,13 +131,7 @@ export class World {
     const bodies = this.bodies;
     // portal apertures: which tiles each body may ignore this substep
     this.frameIgnore.clear();
-    if (this.portals) {
-      for (const b of bodies) {
-        if (b.dead) continue;
-        const ig = this.portals.ignoreTilesFor(b);
-        if (ig) this.frameIgnore.set(b.id, ig);
-      }
-    }
+    for (const b of bodies) if (!b.dead) this.refreshIgnore(b);
 
     // 1. kinematic bodies move and carry riders
     for (const b of bodies) {
@@ -122,6 +175,8 @@ export class World {
       const prevGround = b.groundBody;
       b.onGround = false; b.groundBody = null; b.hitWall = false; b.hitCeiling = false;
       if (b.portalCooldown > 0) b.portalCooldown -= dt;
+      if (b.fieldCooldown > 0) b.fieldCooldown -= dt;
+      if (b.knockback > 0) b.knockback -= dt;
       if (b.ignoreOneWay > 0) b.ignoreOneWay -= dt;
       if (!b.held && b.gravityScale !== 0) b.vy += this.gravity * b.gravityScale * dt;
       // drag
@@ -131,7 +186,7 @@ export class World {
       if (sp > b.maxSpeed) { b.vx *= b.maxSpeed / sp; b.vy *= b.maxSpeed / sp; }
       if (b.type === BodyType.CHARACTER && b.controller) b.controller.prePhysics(dt, this);
       // portal apertures depend on the current velocity (floor portals only swallow falling bodies)
-      if (this.portals) { const ig = this.portals.ignoreTilesFor(b); if (ig) this.frameIgnore.set(b.id, ig); else this.frameIgnore.delete(b.id); }
+      this.refreshIgnore(b);
 
       // move
       this.moveX(b, b.vx * dt);
@@ -224,7 +279,7 @@ export class World {
   /** Move body horizontally, resolving tile collisions. */
   moveX(b, dx, silent = false) {
     if (dx === 0) return;
-    const ig = this.ignoreFor(b);
+    let ig = this.ignoreFor(b);
     b.x += dx;
     const map = this.map;
     const y0 = Math.floor((b.y + SKIN) / TILE), y1 = Math.floor((b.bottom - SKIN) / TILE);
@@ -234,6 +289,11 @@ export class World {
         if (this.solidTile(cx, cy, ig)) {
           if (this.trySmash(b, cx, cy, b.vx)) { b.vx *= 0.75; continue; }
           const nx = cx * TILE - b.w - SKIN;
+          if (map.isField(map.get(cx, cy))) {
+            if (this.hitField(b, cx, cy, 'x', b.vx)) { ig = this.ignoreFor(b); continue; }
+            if (nx < b.x) b.x = nx;
+            b.hitWall = true; break;
+          }
           if (nx < b.x) { b.x = nx; }
           if (b.vx > 0) { if (!silent) this.impact(b, b.vx, null); b.vx = b.bounce > 0.25 ? -b.vx * b.bounce : 0; }
           b.hitWall = true;
@@ -246,6 +306,11 @@ export class World {
         if (this.solidTile(cx, cy, ig)) {
           if (this.trySmash(b, cx, cy, b.vx)) { b.vx *= 0.75; continue; }
           const nx = (cx + 1) * TILE + SKIN;
+          if (map.isField(map.get(cx, cy))) {
+            if (this.hitField(b, cx, cy, 'x', b.vx)) { ig = this.ignoreFor(b); continue; }
+            if (nx > b.x) b.x = nx;
+            b.hitWall = true; break;
+          }
           if (nx > b.x) b.x = nx;
           if (b.vx < 0) { if (!silent) this.impact(b, b.vx, null); b.vx = b.bounce > 0.25 ? -b.vx * b.bounce : 0; }
           b.hitWall = true;
@@ -287,7 +352,7 @@ export class World {
       this.checkGround(b);
       return;
     }
-    const ig = this.ignoreFor(b);
+    let ig = this.ignoreFor(b);
     const prevBottom = b.bottom;
     b.y += dy;
     const map = this.map;
@@ -299,6 +364,12 @@ export class World {
         const solid = this.solidTile(cx, cy, ig);
         const oneway = (t === T.ONEWAY || (!b.climbing && map.isLadderTop(cx, cy))) && b.ignoreOneWay <= 0 && prevBottom <= cy * TILE + 0.5 && !(ig && ig.has(cy * map.cols + cx));
         if (solid && this.trySmash(b, cx, cy, b.vy)) { b.vy *= 0.75; continue; }
+        if (solid && map.isField(t)) {
+          if (this.hitField(b, cx, cy, 'y', b.vy)) { ig = this.ignoreFor(b); continue; }
+          b.y = cy * TILE - b.h - SKIN;
+          if (b.vy >= 0) { b.onGround = true; b.groundBody = null; }   // could not bounce (too slow): stand on it
+          break;
+        }
         if (solid || oneway) {
           b.y = cy * TILE - b.h - SKIN;
           if (b.vy > 0) {
@@ -314,6 +385,10 @@ export class World {
       for (let cx = x0; cx <= x1; cx++) {
         if (this.solidTile(cx, cy, ig)) {
           if (this.trySmash(b, cx, cy, b.vy)) { b.vy *= 0.75; continue; }
+          if (map.isField(map.get(cx, cy))) {
+            if (this.hitField(b, cx, cy, 'y', b.vy)) { ig = this.ignoreFor(b); continue; }
+            b.y = (cy + 1) * TILE + SKIN; b.hitCeiling = true; break;
+          }
           b.y = (cy + 1) * TILE + SKIN;
           if (b.vy < 0) { if (!silent) this.impact(b, b.vy, null); b.vy = b.bounce > 0.25 ? -b.vy * b.bounce : 0; }
           b.hitCeiling = true;
@@ -336,6 +411,7 @@ export class World {
     for (let cx = x0; cx <= x1; cx++) {
       const t = map.get(cx, cy);
       if (this.solidTile(cx, cy, ig) || ((t === T.ONEWAY || (!b.climbing && map.isLadderTop(cx, cy))) && b.ignoreOneWay <= 0 && !(ig && ig.has(cy * map.cols + cx)))) {
+        if (map.isField(t) && b.vy >= 150) return;   // falling fast onto a field floor: let moveY handle the contact (bounce / tunnel)
         if (b.vy >= 0) { b.onGround = true; if (b.vy > 0) b.vy = 0; }
         return;
       }

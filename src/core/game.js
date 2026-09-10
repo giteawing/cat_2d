@@ -14,7 +14,7 @@ import { drawGun } from '../weapons/gunSprites.js';
 import { PortalManager } from '../portals/portalManager.js';
 import { drawPortal, drawPortalPreview } from '../portals/portalRenderer.js';
 import { Channels } from '../puzzles/puzzles.js';
-import { TileRenderer } from '../render/tileRenderer.js';
+import { TileRenderer, drawFields } from '../render/tileRenderer.js';
 import { Effects } from '../render/effects.js';
 import { AudioSystem } from '../audio/audio.js';
 import { HUD, panel, roundRect } from '../ui/hud.js';
@@ -84,6 +84,7 @@ export class Game {
     const kit = new LevelKit(this);
     def.setup(kit, this);
     if (def.weapons) for (const w of def.weapons) this.weapons.unlock(w);
+    if (def.abilities && def.abilities.includes('tunnel')) this.player.tunnelUnlocked = true;
     if (def.exit) this.exit = { x: def.exit[0] * TILE, y: def.exit[1] * TILE, w: TILE * (def.exitW || 2), h: TILE * 2 };
     this.giftsTotal = this.gifts.length;
     // already-collected gifts stay collected (progress is persistent) — but show them for replay value
@@ -92,6 +93,7 @@ export class Game {
     this.world.onImpact = (b, speed, other) => this.onImpact(b, speed, other);
     this.world.onBreak = (b) => this.onBreak(b);
     this.world.onTileBreak = (tiles, b) => this.onTileBreak(tiles, b);
+    this.world.onField = (b, kind, x, y, nx, ny, speed) => this.onField(b, kind, x, y, nx, ny, speed);
     this.portals.onTeleport = (b, from, to) => this.onTeleport(b, from, to);
     this.camera.snapTo(this.player.cx, this.player.cy);
     this.hud.message = null;
@@ -114,6 +116,24 @@ export class Game {
       case 'land': this.audio.play('land', data); if (data.speed > 250) this.effects.dust(this.player.cx, this.player.feetY, 6); break;
       case 'step': this.audio.play('step', data); break;
       case 'teleport': this.audio.play('teleport'); break;
+      case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: this.player.cx, y: this.player.body.cy }, '#7FD3FF', 14, 160); this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в электрополе — шанс пройти 25%', 2.5); break;
+      case 'tunnelOff': this.audio.play('tunnelOff'); this.hud.show('Квантовое туннелирование: ВЫКЛ', '', 1.5); break;
+    }
+  }
+  /** Electric-field contact: sparks, sound, cat reaction. */
+  onField(b, kind, x, y, nx, ny, speed = 0) {
+    const isCat = b.kind === 'cat';
+    if (kind === 'pass') {
+      this.audio.play('tunnelPass');
+      this.effects.burst({ x, y }, '#9FE7FF', 22, 240);
+      this.effects.burst({ x, y }, '#FFFFFF', 8, 120);
+      if (isCat) { this.player.fieldFlash = 0.5; this.player.playEmote('happy', 0.9); this.effects.text(b.cx, b.y - 14, 'туннель!', '#BFF0FF'); }
+      this.input.rumble(0.2, 0.6, 120);
+    } else {
+      this.audio.play('zap', { speed });
+      const n = speed > 250 ? 14 : 5;
+      for (let i = 0; i < n; i++) this.effects.spawnParticle(x, y + (Math.random() - 0.5) * 40, nx * (120 + Math.random() * 260) + (Math.random() - 0.5) * 120, ny * (120 + Math.random() * 260) + (Math.random() - 0.5) * 220, 0.3 + Math.random() * 0.3, i % 3 ? '#8FE3FF' : '#FFFFFF', 2 + Math.random() * 2, 300);
+      if (isCat && speed > 250) { this.player.fieldFlash = 0.3; this.player.playEmote('surprise', 0.7); this.effects.shake(3); this.input.rumble(0.5, 0.3, 90); }
     }
   }
   onImpact(b, speed, other) {
@@ -163,7 +183,7 @@ export class Game {
   /** Button label for hints: mouse or gamepad wording depending on the last device used. */
   btn(which) {
     const pad = this.input.padActive;
-    return { lmb: pad ? 'RT' : 'ЛКМ', rmb: pad ? 'LT' : 'ПКМ', e: pad ? 'B' : 'E', k1: pad ? 'LB' : '1', k2: pad ? 'RB' : '2' }[which];
+    return { lmb: pad ? 'RT' : 'ЛКМ', rmb: pad ? 'LT' : 'ПКМ', e: pad ? 'B' : 'E', k1: pad ? 'LB' : '1', k2: pad ? 'RB' : '2', q: pad ? 'L3' : 'Q' }[which];
   }
 
   // ------------------------------------------------------------------ loop
@@ -281,6 +301,7 @@ export class Game {
     this.frameInput = inp; inp.pendingSteps = true;
     this.player.setInput({ left: inp.left, right: inp.right, up: inp.up, down: inp.down, jump: inp.jump, run: inp.run });
     if (inp.jumpPressed) this.player.input.jumpPressed = true;
+    if (inp.tunnelPressed && this.player.tunnelUnlocked) this.player.toggleTunneling();
 
     // fixed-step physics
     this.accumulator += dt;
@@ -300,10 +321,17 @@ export class Game {
       if (p.taken) continue;
       const b = this.player.body;
       if (b.x < p.x + 40 && b.right > p.x - 12 && b.y < p.y + 40 && b.bottom > p.y - 12) {
-        p.taken = true; this.weapons.unlock(p.kind); this.weapons.select(p.kind);
+        p.taken = true;
         this.audio.play('unlock'); this.player.playEmote('happy', 1.2);
-        this.hud.show(p.kind === 'gravity' ? 'Gravity Gun получена!' : 'Portal Gun получена!', p.kind === 'gravity' ? `${this.btn('lmb')} — схватить / бросить, ${this.btn('rmb')} — толкнуть. Клавиша ${this.btn('k1')}` : `${this.btn('lmb')} — синий портал, ${this.btn('rmb')} — оранжевый. Клавиша ${this.btn('k2')}`, 4.5);
-        this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#FFE9B8', 20, 280);
+        if (p.kind === 'tunnel') {
+          this.player.tunnelUnlocked = true;
+          this.hud.show('Режим квантового туннелирования!', `${this.btn('q')} — включить/выключить. С разбега (Shift) беги в электрополе: шанс пройти 25%, иначе отскок`, 6);
+          this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#8FE3FF', 26, 300);
+        } else {
+          this.weapons.unlock(p.kind); this.weapons.select(p.kind);
+          this.hud.show(p.kind === 'gravity' ? 'Gravity Gun получена!' : 'Portal Gun получена!', p.kind === 'gravity' ? `${this.btn('lmb')} — схватить / бросить, ${this.btn('rmb')} — толкнуть. Клавиша ${this.btn('k1')}` : `${this.btn('lmb')} — синий портал, ${this.btn('rmb')} — оранжевый. Клавиша ${this.btn('k2')}`, 4.5);
+          this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#FFE9B8', 20, 280);
+        }
       }
     }
     // signs
@@ -371,6 +399,7 @@ export class Game {
     // doors are drawn before tiles so they slide "into" walls
     for (const p of this.puzzles) if (p.body && p.body.kind === 'door') p.draw(ctx, this.time);
     this.tiles.drawTiles(ctx, cam, cam.w + 2, cam.h + 2);
+    drawFields(ctx, this.map, cam, this.time);
     // exit door
     if (this.exit) drawExit(ctx, this.exit, this.time, this.giftsCollected === this.giftsTotal);
     // puzzle elements (behind bodies)
@@ -405,7 +434,7 @@ export class Game {
   drawPortalPreview(ctx) {
     const hand = this.player.handPos();
     const a = this.weapons.gunAngle;
-    const hit = this.map.raycast(hand.x, hand.y, Math.cos(a), Math.sin(a), 3000);
+    const hit = this.map.raycast(hand.x, hand.y, Math.cos(a), Math.sin(a), 3000, null, (cx, cy) => this.map.blocksShot(this.map.get(cx, cy)));
     if (!hit) return;
     const ok = this.map.isPortalable(hit.tile);
     // exact placement check without committing
@@ -451,7 +480,7 @@ export class Game {
     const blink = Math.sin(performance.now() / 300) > -0.2;
     if (blink) { ctx.font = 'bold 20px "Trebuchet MS", sans-serif'; ctx.fillStyle = '#fff'; ctx.strokeText('Нажми Enter или кликни, чтобы начать', VIEW_W / 2 - 100, 300); ctx.fillText('Нажми Enter или кликни, чтобы начать', VIEW_W / 2 - 100, 300); }
     ctx.font = '14px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    const lines = ['A/D или ←/→ — ходьба   Shift — бег   Space — прыжок   W/S — лестница / присесть', '1 — Gravity Gun   2 — Portal Gun   ЛКМ / ПКМ — действия пушки   E — взаимодействие', 'Геймпад: A — прыжок   X — бег   B — действие   LB/RB — пушки   RT/LT — огонь   ПС — прицел', 'Никаких таймеров. Исследуй, бросай предметы и экспериментируй с порталами!'];
+    const lines = ['A/D или ←/→ — ходьба   Shift — бег   Space — прыжок   W/S — лестница / присесть', '1 — Gravity Gun   2 — Portal Gun   ЛКМ / ПКМ — действия пушки   E — взаимодействие   Q — квантовый режим', 'Геймпад: A — прыжок   X — бег   B — действие   LB/RB — пушки   RT/LT — огонь   ПС — прицел', 'Никаких таймеров. Исследуй, бросай предметы и экспериментируй с порталами!'];
     ctx.textAlign = 'left';
     lines.forEach((l, i) => ctx.fillText(l, 40, 380 + i * 24));
     ctx.textAlign = 'center';
@@ -569,6 +598,7 @@ function drawExit(ctx, e, time, allGifts) {
 
 function drawPickup(ctx, p, time) {
   const bob = Math.sin(time * 3) * 3;
+  if (p.kind === 'tunnel') { drawTunnelPickup(ctx, p, time, bob); return; }
   ctx.save();
   ctx.translate(p.x + 14, p.y + 14 + bob);
   ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(0, 0, 24 + Math.sin(time * 4) * 2, 0, Math.PI * 2); ctx.fill();
@@ -580,6 +610,29 @@ function drawPickup(ctx, p, time) {
   ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3;
   const label = p.kind === 'gravity' ? 'Gravity Gun' : 'Portal Gun';
   ctx.strokeText(label, p.x + 14, p.y - 12 + bob); ctx.fillText(label, p.x + 14, p.y - 12 + bob);
+}
+
+/** Quantum tunneling ability pickup: a glowing blue "quantum collar" orb. */
+function drawTunnelPickup(ctx, p, time, bob) {
+  const x = p.x + 14, y = p.y + 14 + bob;
+  ctx.save();
+  const g = ctx.createRadialGradient(x, y, 2, x, y, 26);
+  g.addColorStop(0, 'rgba(200,240,255,0.9)'); g.addColorStop(0.5, 'rgba(90,190,255,0.45)'); g.addColorStop(1, 'rgba(90,190,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 26 + Math.sin(time * 4) * 2, 0, Math.PI * 2); ctx.fill();
+  // orbiting electrons
+  for (let i = 0; i < 3; i++) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(i * Math.PI / 3 + time * 0.7);
+    ctx.strokeStyle = 'rgba(120,210,255,0.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, 16, 6, 0, 0, Math.PI * 2); ctx.stroke();
+    const a = time * (3 + i); ctx.fillStyle = '#E8FAFF'; ctx.beginPath(); ctx.arc(Math.cos(a) * 16, Math.sin(a) * 6, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = '#5BC8FF'; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 1.5, y - 1.5, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3;
+  const label = 'Квантовый режим';
+  ctx.strokeText(label, x, p.y - 16 + bob); ctx.fillText(label, x, p.y - 16 + bob);
 }
 
 function drawSign(ctx, s) {

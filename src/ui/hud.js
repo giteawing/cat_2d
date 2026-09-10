@@ -50,6 +50,25 @@ export class HUD {
       }
     }
 
+    // ---- quantum tunneling mode indicator (below the weapon panel) ----
+    if (p.tunnelUnlocked) {
+      const py = ws.current ? (ws.current === 'portal' ? 144 : 118) : 60;
+      panel(ctx, 12, py, 168, 34);
+      const on = p.tunneling;
+      const pulse = 0.6 + 0.4 * Math.sin(game.time * 8);
+      ctx.save();
+      if (on) { ctx.shadowColor = 'rgba(110,210,255,1)'; ctx.shadowBlur = 8 + 6 * pulse; }
+      ctx.strokeStyle = on ? `rgba(${Math.round(140 + 60 * pulse)},225,255,1)` : 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(30, py + 17, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(30, py + 17, 12, 4.5, game.time * 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = on ? '#BFEFFF' : 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(30, py + 17, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.font = 'bold 12px "Trebuchet MS", sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = on ? '#BFEFFF' : '#fff';
+      ctx.fillText('Квант. туннелирование', 50, py + 12);
+      ctx.font = '11px "Trebuchet MS", sans-serif'; ctx.fillStyle = on ? '#7FE0FF' : 'rgba(255,255,255,0.6)';
+      ctx.fillText(on ? `ВКЛ · шанс 25%   [${game.btn('q')}]` : `ВЫКЛ   [${game.btn('q')}] — включить`, 50, py + 26);
+    }
+
     // ---- top-right: level name ----
     ctx.font = 'bold 13px "Trebuchet MS", sans-serif'; ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText(game.level.name, w - 15, 23);

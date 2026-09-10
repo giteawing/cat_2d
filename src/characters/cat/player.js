@@ -58,6 +58,10 @@ export class Player {
     this.blink = 0;
     this.blinkTimer = 2 + Math.random() * 3;
     this.lastVy = 0;
+    this.tunneling = false;          // quantum tunneling mode (toggle); mirrored onto body.tunneling
+    this.tunnelUnlocked = false;     // ability available in this level
+    this.tunnelFx = 0;               // 0..1 glow ramp
+    this.fieldFlash = 0;             // brief flash after a field pass/bounce
     this.headTilt = 0;
     this.squash = 1;                  // visual squash/stretch
     this.stretch = 1;
@@ -85,6 +89,15 @@ export class Player {
 
   playEmote(name, dur = 0.8) { this.emote = name; this.emoteTimer = dur; }
 
+  /** Toggle quantum tunneling mode (if unlocked). Returns the new state or null when unavailable. */
+  toggleTunneling(force = null) {
+    if (!this.tunnelUnlocked) return null;
+    this.tunneling = force === null ? !this.tunneling : !!force;
+    this.body.tunneling = this.tunneling;
+    this.emit(this.tunneling ? 'tunnelOn' : 'tunnelOff');
+    return this.tunneling;
+  }
+
   /** Called by the physics world before moving the body each substep. */
   prePhysics(dt, world) {
     const b = this.body;
@@ -106,7 +119,8 @@ export class Player {
     const wantCrouch = inp.down && this.onGround && !this.climbing;
     this.setCrouch(wantCrouch, world);
 
-    const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    let dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    if (b.knockback > 0) { if (dir !== 0) this.facing = dir; dir = 0; }   // flung back by an electric field: no control for a moment
     this.moveInput = dir;
     this.running = inp.run && !this.crouching;
     let maxSpeed = this.running ? RUN_SPEED : WALK_SPEED;
@@ -141,7 +155,7 @@ export class Player {
       if (!(this.weapon && this.weapon.isAiming())) this.facing = dir;
     } else {
       // in the air above run speed (portal fling): barely slow down, so momentum puzzles work hands-off
-      const decel = this.onGround ? DECEL_GROUND : (Math.abs(rel) > RUN_SPEED ? 120 : DECEL_AIR);
+      const decel = b.knockback > 0 ? 200 : this.onGround ? DECEL_GROUND : (Math.abs(rel) > RUN_SPEED ? 120 : DECEL_AIR);
       b.vx = groundVx + approach(rel, 0, decel * dt);
     }
 
@@ -202,6 +216,8 @@ export class Player {
     if (this.jumpStartTimer > 0) this.jumpStartTimer -= dt;
     if (this.emoteTimer > 0) { this.emoteTimer -= dt; if (this.emoteTimer <= 0) this.emote = null; }
     if (this.portalFlash > 0) this.portalFlash -= dt;
+    if (this.fieldFlash > 0) this.fieldFlash -= dt;
+    this.tunnelFx += ((this.tunneling ? 1 : 0) - this.tunnelFx) * Math.min(1, dt * 8);
     if (b.pushing && world.time - b.pushing < 0.1 && this.moveInput !== 0) this.pushingTimer = 0.15; else this.pushingTimer -= dt;
     this.squash += (1 - this.squash) * Math.min(1, dt * 12);
     this.stretch += (1 - this.stretch) * Math.min(1, dt * 12);

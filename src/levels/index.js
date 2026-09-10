@@ -5,5 +5,6 @@ import { level03 } from './world01/level03.js';
 import { level04 } from './world01/level04.js';
 import { level05 } from './world01/level05.js';
 import { level06 } from './world01/level06.js';
+import { level07 } from './world01/level07.js';
 
-export const LEVELS = [level01, level02, level03, level04, level05, level06];
+export const LEVELS = [level01, level02, level03, level04, level05, level06, level07];

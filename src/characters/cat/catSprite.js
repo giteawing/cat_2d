@@ -182,12 +182,58 @@ export function drawCat(ctx, p, time, weaponView) {
   const b = p.body;
   const fx = b.cx, fy = b.bottom;
   const facing = p.facing;
+  const glow = Math.max(p.tunnelFx || 0, 0) + (p.fieldFlash > 0 ? p.fieldFlash * 2 : 0);
+  if (glow > 0.03) drawQuantumOutline(ctx, p, pose, time, weaponView, facing, Math.min(1.6, glow));
   ctx.save();
   ctx.translate(fx, fy);
   ctx.scale(facing, 1);
   // squash & stretch around the feet
   ctx.scale(pose.squashX, pose.squashY);
   drawCatLocal(ctx, pose, p, time, weaponView, facing);
+  ctx.restore();
+}
+
+// Quantum tunneling mode: a glowing blue outline around the whole cat. The cat is rendered once into a small
+// offscreen canvas, turned into a blue silhouette and stamped around the cat (8 offsets) with a soft glow.
+let outlineCanvas = null;
+const OUT_W = 200, OUT_H = 200, OUT_OX = 100, OUT_OY = 150;   // feet anchor inside the offscreen canvas
+function drawQuantumOutline(ctx, p, pose, time, weaponView, facing, strength) {
+  if (!outlineCanvas) { outlineCanvas = document.createElement('canvas'); outlineCanvas.width = OUT_W; outlineCanvas.height = OUT_H; }
+  const oc = outlineCanvas.getContext('2d');
+  oc.save();
+  oc.globalCompositeOperation = 'source-over';
+  oc.clearRect(0, 0, OUT_W, OUT_H);
+  oc.translate(OUT_OX, OUT_OY);
+  oc.scale(facing, 1);
+  oc.scale(pose.squashX, pose.squashY);
+  drawCatLocal(oc, pose, p, time, weaponView, facing);
+  oc.restore();
+  const b = p.body;
+  const x = b.cx - OUT_OX, y = b.bottom - OUT_OY;
+  const flick = 0.8 + 0.2 * Math.sin(time * 18) + (p.fieldFlash > 0 ? 0.4 : 0);
+  const a = Math.min(1, strength);
+  // tint: keep alpha, replace colour (source-in) — first a deep blue wide ring, then a bright thin one
+  const tint = (color) => { oc.save(); oc.globalCompositeOperation = 'source-in'; oc.fillStyle = color; oc.fillRect(0, 0, OUT_W, OUT_H); oc.restore(); };
+  const stamp = (r) => { for (let i = 0; i < 8; i++) { const ang = i * Math.PI / 4 + time * 2; ctx.drawImage(outlineCanvas, x + Math.cos(ang) * r, y + Math.sin(ang) * r); } };
+  ctx.save();
+  tint('rgba(40,130,255,1)');
+  ctx.globalAlpha = 0.45 * a;
+  ctx.shadowColor = 'rgba(60,170,255,1)'; ctx.shadowBlur = 16 + 5 * Math.sin(time * 11);
+  ctx.drawImage(outlineCanvas, x, y);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 0.85 * a;
+  stamp(3.5 + 0.5 * Math.sin(time * 13));
+  tint(`rgba(${Math.round(150 + 60 * flick)},${Math.round(225 + 30 * flick)},255,1)`);
+  ctx.globalAlpha = 0.95 * a;
+  stamp(1.6);
+  // drifting quantum particles
+  ctx.globalAlpha = 0.8 * a;
+  ctx.fillStyle = '#DFF6FF';
+  for (let i = 0; i < 5; i++) {
+    const t = time * (0.8 + i * 0.17) + i * 1.3;
+    const px = b.cx + Math.cos(t) * (22 + (i % 2) * 8), py = b.cy + Math.sin(t * 1.7) * 30 - 4;
+    ctx.beginPath(); ctx.arc(px, py, 1.6 + (i % 2) * 0.6, 0, TAU); ctx.fill();
+  }
   ctx.restore();
 }
 

@@ -60,7 +60,7 @@ export class LevelKit {
   /** Sign with text (world-space hint shown when near). */
   sign(tx, ty, text, opts = {}) { this.game.signs.push({ x: px(tx), y: px(ty), text, w: opts.w || 2, seen: false }); }
   /** Decorative (non-physical) props */
-  decor(kind, tx, ty, opts = {}) { this.game.decor.push({ kind, x: px(tx) + (opts.dx || 0), y: px(ty) + (opts.dy || 0), w: opts.w || TILE, h: opts.h || TILE, color: opts.color }); }
+  decor(kind, tx, ty, opts = {}) { this.game.decor.push({ kind, x: px(tx) + (opts.dx || 0), y: px(ty) + (opts.dy || 0), w: opts.w || TILE, h: opts.h || TILE, color: opts.color, text: opts.text }); }
   /** One-shot message when entering an area */
   message(tx, ty, w, h, text, sub = '') { return this.trigger(tx, ty, w, h, (g) => g.hud.show(text, sub)); }
   /** Give a weapon when entering an area */
