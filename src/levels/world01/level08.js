@@ -86,7 +86,7 @@ export const level08 = {
     k.sign(125, 27, 'Дальше — металл и поле без выключателя. Только квантовый режим (Q) и разбег!');
     k.gift(135, 28, 'rare', 'g5');
     k.secret(132, 20, 6, 10, 's1');
-    k.clutter(['giftBox', 'teddy', 'yarn'], 133, 30, 4, 96);
+    k.clutter(['giftBox', 'teddy', 'yarn'], 136.5, 30, 2, 96);   // keep the run-up back to the field clear
     k.decor('pipe', 96, 11, { w: 35 * 32, h: 6 });
   },
 };

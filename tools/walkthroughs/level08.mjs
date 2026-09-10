@@ -57,7 +57,7 @@ w.walkTo(117.5); d.step(10); d.tap('KeyQ'); d.step(5); w.expect(p.tunneling, 'qu
 w.runJump(1, 10, 45); d.step(10); w.where('past the exit'); w.expect(game.state === 'playing' && p.body.cx > 122 * T, 'jumped over the exit door');
 w.walkTo(127); d.step(10); w.expect(tunnel(1, 132.5), 'tunneled into the secret');
 w.walkTo(135); d.step(20); w.expect(game.gifts.find((g) => g.id === 'g5').collected, 'rare gift');
-w.walkTo(133.5); d.step(10); w.expect(tunnel(-1, 129.5), 'tunneled back out');
+w.walkTo(134.5); d.step(10); w.expect(tunnel(-1, 129.5), 'tunneled back out');
 w.walkTo(121); d.step(120); w.shot('walk08_end');
 w.expect(game.state === 'complete', 'level complete');
 w.done();
