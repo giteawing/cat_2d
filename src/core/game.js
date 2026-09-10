@@ -582,10 +582,12 @@ export class Game {
         for (let k = 0; k < total; k++) {
           const had = k < s.gifts.length;
           ctx.globalAlpha = had ? 1 : 0.25;
-          drawGiftBox(ctx, c.x + 10 + k * 20, c.y + 54, 14, 12, GIFT_TYPES.normal, 0);
+          drawGiftBox(ctx, c.x + 10 + k * 16, c.y + 52, 12, 11, GIFT_TYPES.normal, 0);
           ctx.globalAlpha = 1;
         }
-        if (s.completed) { ctx.fillStyle = '#3FBF8C'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'right'; ctx.fillText('✓ пройден', c.x + c.w - 10, c.y + 62); }
+        ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'right';
+        if (s.completed) { ctx.fillStyle = '#3FBF8C'; ctx.fillText('✓ пройден', c.x + c.w - 10, c.y + 74); }
+        if (s.secrets.length) { ctx.fillStyle = '#E0A800'; ctx.fillText('★'.repeat(s.secrets.length) + ' секрет', c.x + (s.completed ? 62 : c.w - 10), c.y + 74); }
       } else { // padlock drawn by hand (emoji fonts are not guaranteed)
         const lx = c.x + c.w - 24, ly = c.y + 52;
         ctx.strokeStyle = 'rgba(60,70,90,0.7)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(lx + 7, ly, 5, Math.PI, 0); ctx.stroke();
