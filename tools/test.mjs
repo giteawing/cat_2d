@@ -234,5 +234,39 @@ const R = [
   }
 }
 
+// ------------------------------------------------------------ unit: electric fields & quantum tunneling
+{
+  console.log('Electric fields & quantum tunneling');
+  const F = R.map((l, y) => (y >= 1 && y <= 10 ? l.slice(0, 10) + '~' + l.slice(11) : l));   // field wall at col 10
+  // a thrown crate bounces back elastically
+  { const { world } = room(F); const b = world.add(makeProp('crate', 8 * TILE, 8 * TILE)); b.vx = 600;
+    for (let i = 0; i < 30; i++) world.step(1 / 120);
+    check('thrown crate bounces off the field', b.vx < -400 && b.right <= 10 * TILE + 0.01, `vx=${b.vx} right=${b.right}`); }
+  // portal shot passes through the field
+  { const { portals } = room(F); const r = portals.shoot('blue', 100, 200, 1, 0, null);
+    check('portal shot passes through the field', r.ok && near(portals.blue.x, 19 * TILE, 0.01), `x=${portals.blue.x} ${JSON.stringify(r.reason)}`); }
+  // the cat: mode off → bounce; mode on + slow → bounce; mode on + fast → 25% via rng
+  const { Player } = await import('../src/characters/cat/player.js');
+  const runAt = (tunneling, speed, rng) => {
+    const { world } = room(F); world.rng = rng;
+    const p = new Player(200, 11 * TILE - 54); world.add(p.body); p.tunnelUnlocked = true; p.toggleTunneling(tunneling);
+    p.setInput({ left: false, right: true, up: false, down: false, jump: false, run: speed > 200 });
+    let events = []; world.onField = (b, kind) => events.push(kind);
+    for (let i = 0; i < 90; i++) { world.step(1 / 120); if (i < 5) p.update(1 / 120, world); }
+    return { p, events };
+  };
+  { const { p, events } = runAt(false, 300, () => 0); check('mode off: cat bounces (even with a lucky roll)', events[0] === 'bounce' && p.body.right <= 10 * TILE + 0.01, `${events} x=${p.body.cx}`); }
+  { const { p, events } = runAt(true, 190, () => 0); check('mode on, walking (no run-up): cat bounces', events[0] === 'bounce' && p.body.right <= 10 * TILE + 0.01, `${events} x=${p.body.cx}`); }
+  { const { p, events } = runAt(true, 300, () => 0.9); check('mode on, running, unlucky roll: elastic bounce', events[0] === 'bounce' && p.body.right <= 10 * TILE + 0.01, `${events} x=${p.body.cx}`); }
+  { const { p, events } = runAt(true, 300, () => 0.1); check('mode on, running, lucky roll: tunnels through', events[0] === 'pass' && p.body.x >= 11 * TILE - 0.01, `${events} x=${p.body.cx}`); }
+  { const { p, events } = runAt(true, 300, () => 0.24); check('threshold: roll 0.24 passes (25%)', events[0] === 'pass', `${events}`); }
+  { const { p, events } = runAt(true, 300, () => 0.26); check('threshold: roll 0.26 bounces', events[0] === 'bounce', `${events}`); }
+  // field floor: a fall bounces, a settled body stands
+  { const G = R.map((l, y) => (y === 8 ? l.slice(0, 5) + '~~~~~~' + l.slice(11) : l));
+    const { world } = room(G); const b = world.add(makeProp('crate', 6 * TILE, 2 * TILE));
+    let bounced = false; for (let i = 0; i < 600; i++) { world.step(1 / 120); if (b.vy < -200) bounced = true; }
+    check('crate bounces on a field floor, then settles on it', bounced && b.onGround && near(b.bottom, 8 * TILE, 0.5) && Math.abs(b.vy) < 1, `bounced=${bounced} bottom=${b.bottom} vy=${b.vy}`); }
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);
