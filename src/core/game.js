@@ -24,7 +24,8 @@ import { drawGiftBox, GIFT_TYPES } from '../gifts/gift.js';
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
-export const ZOOM = 1.25;   // world pixels are scaled up for a cosier, more readable picture
+export const ZOOM = 1.25;
+const WORLD_NAMES = { 1: 'Дом и лаборатория', 2: 'Обсерватория' };   // world pixels are scaled up for a cosier, more readable picture
 const FIXED_DT = 1 / 120;
 
 export class Game {
@@ -283,8 +284,12 @@ export class Game {
     const cols = 5;
     if (inp.right && !this._selHold) this.menuIndex = (this.menuIndex + 1) % n;
     if (inp.left && !this._selHold) this.menuIndex = (this.menuIndex - 1 + n) % n;
-    if (inp.down && !this._selHold) this.menuIndex = Math.min(n - 1, this.menuIndex + cols);
-    if (inp.up && !this._selHold) this.menuIndex = Math.max(0, this.menuIndex - cols);
+    if ((inp.down || inp.up) && !this._selHold) { // move to the nearest card in the row below/above
+      const cells = this.selectCells(), me = cells[this.menuIndex], dir = inp.down ? 1 : -1;
+      let best = -1, bestD = Infinity;
+      cells.forEach((c, i) => { if (Math.sign(c.y - me.y) !== dir) return; const dd = Math.abs(c.y - me.y) * 10 + Math.abs(c.x - me.x); if (dd < bestD) { bestD = dd; best = i; } });
+      if (best >= 0) this.menuIndex = best;
+    }
     this._selHold = inp.left || inp.right || inp.up || inp.down;
     // mouse hover / click
     const cells = this.selectCells();
@@ -299,10 +304,18 @@ export class Game {
     if (inp.pause) this.state = 'title';
     if (this.input.wasPressed('Delete') && this.input.down('ShiftLeft')) { this.save.reset(); }
   }
+  /** Level cards grouped by world: each world starts on a new row under a small header. */
   selectCells() {
-    const cols = 5, cw = 150, ch = 84, gap = 14;
-    const x0 = (VIEW_W - (cols * cw + (cols - 1) * gap)) / 2, y0 = 150;
-    return LEVELS.map((_, i) => ({ x: x0 + (i % cols) * (cw + gap), y: y0 + Math.floor(i / cols) * (ch + gap), w: cw, h: ch }));
+    const cols = 5, cw = 150, ch = 84, gap = 14, header = 22;
+    const x0 = (VIEW_W - (cols * cw + (cols - 1) * gap)) / 2;
+    let y = 118, world = null, col = 0; const cells = []; this._selectHeaders = [];
+    LEVELS.forEach((L, i) => {
+      const wn = L.world || 1;
+      if (wn !== world) { if (world !== null) y += ch + gap; world = wn; col = 0; this._selectHeaders.push({ y: y + header / 2, text: `Мир ${wn} — ${WORLD_NAMES[wn] || ''}` }); y += header + 6; }
+      else if (col === cols) { col = 0; y += ch + gap; }
+      cells.push({ x: x0 + col * (cw + gap), y, w: cw, h: ch, world: wn }); col++;
+    });
+    return cells;
   }
   updatePaused(inp) {
     if (inp.pause) { this.state = 'playing'; return; }
@@ -577,6 +590,7 @@ export class Game {
     ctx.font = '14px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText('Стрелки / мышь — выбрать, Enter или клик — играть, Esc — назад', VIEW_W / 2, 95);
     const cells = this.selectCells();
+    for (const h of this._selectHeaders) { ctx.font = 'bold 15px "Trebuchet MS", sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fillText(h.text, cells[0].x, h.y); }
     cells.forEach((c, i) => {
       const L = LEVELS[i];
       const unlocked = this.save.isUnlocked(LEVELS, i);
