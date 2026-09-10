@@ -74,7 +74,7 @@ export class HUD {
     ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText(game.level.name, w - 15, 23);
     ctx.fillStyle = '#fff'; ctx.fillText(game.level.name, w - 16, 22);
     ctx.font = '11px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText(`Мир ${game.level.world} · Уровень ${game.level.index + 1}   ·   Esc — меню   R — рестарт`, w - 16, 40);
+    ctx.fillText(`Мир ${game.level.world} · Уровень ${game.level.number || game.level.index + 1}   ·   Esc — меню   R — рестарт`, w - 16, 40);
 
     // ---- crosshair ----
     const mx = game.input.mouseX, my = game.input.mouseY;

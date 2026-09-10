@@ -96,6 +96,9 @@ export class AudioSystem {
       case 'swap': this.noise({ dur: 0.12, vol: 0.1, freq: 2500, type: 'highpass' }); this.tone({ freq: arg === 'portal' ? 880 : 520, type: 'triangle', dur: 0.14, vol: 0.1, delay: 0.06, slide: arg === 'portal' ? 300 : -120 }); break;
       case 'portalOpen': { const base = arg === 'orange' ? 300 : 420; this.tone({ freq: base, type: 'sine', dur: 0.35, vol: 0.14, slide: base * 1.5 }); this.tone({ freq: base * 2, type: 'triangle', dur: 0.3, vol: 0.07, slide: base, delay: 0.05 }); this.noise({ dur: 0.25, vol: 0.08, freq: 3000, type: 'highpass' }); break; }
       case 'portalFail': this.tone({ freq: 200, type: 'square', dur: 0.15, vol: 0.07, slide: -90 }); this.tone({ freq: 150, type: 'square', dur: 0.15, vol: 0.07, delay: 0.12, slide: -60 }); break;
+      case 'mirrorFlip': this.tone({ freq: 520, type: 'square', dur: 0.06, vol: 0.06 }); this.tone({ freq: 780, type: 'square', dur: 0.08, vol: 0.06, delay: 0.06 }); break;
+      case 'laserOn': this.tone({ freq: 660, type: 'sine', dur: 0.18, vol: 0.1, slide: 440 }); this.tone({ freq: 1320, type: 'triangle', dur: 0.25, vol: 0.06, delay: 0.1 }); break;
+      case 'laserOff': this.tone({ freq: 880, type: 'sine', dur: 0.2, vol: 0.08, slide: -400 }); break;
       case 'fieldOff': this.tone({ freq: 900, type: 'sawtooth', dur: 0.5, vol: 0.06, slide: -800 }); this.noise({ dur: 0.45, vol: 0.1, freq: 3000, type: 'bandpass', q: 3, slide: -2500 }); break;
       case 'fieldOn': this.tone({ freq: 120, type: 'sawtooth', dur: 0.4, vol: 0.06, slide: 800 }); this.noise({ dur: 0.35, vol: 0.12, freq: 600, type: 'bandpass', q: 3, slide: 3000 }); this.tone({ freq: 2400, type: 'square', dur: 0.06, vol: 0.05, delay: 0.3 }); break;
       case 'tunnelOn': this.tone({ freq: 520, type: 'sine', dur: 0.25, vol: 0.12, slide: 780 }); this.tone({ freq: 1040, type: 'triangle', dur: 0.35, vol: 0.06, slide: 1560, delay: 0.08 }); this.noise({ dur: 0.3, vol: 0.05, freq: 5000, type: 'highpass' }); break;
@@ -134,7 +137,7 @@ export class AudioSystem {
     this.stopMusic();
     this.musicTheme = theme;
     this.step = 0;
-    const bpm = theme === 'lab' ? 104 : 112;
+    const bpm = theme === 'lab' ? 104 : theme === 'observatory' ? 96 : 112;
     const stepDur = 60 / bpm / 2; // 8th notes
     this.nextTime = this.ctx.currentTime + 0.1;
     const tick = () => {
@@ -188,6 +191,13 @@ const MUSIC = {
       N(67), 0, 0, N(71), 0, 0, N(74), 0, N(72), 0, 0, 0, N(71), 0, 0, 0,
       N(65), 0, 0, N(69), 0, 0, N(72), 0, N(74), 0, 0, 0, N(72), 0, 0, 0,
       N(64), 0, 0, N(67), 0, 0, N(71), 0, N(74), 0, 0, 0, N(76), 0, 0, 0],
+  },
+  observatory: {   // dreamy minor waltz-ish loop
+    chords: [[N(57), N(60), N(64)], [N(53), N(57), N(60)], [N(55), N(59), N(62)], [N(52), N(56), N(59)]],
+    melody: [N(76), 0, 0, N(79), 0, 0, N(81), 0, 0, 0, N(79), 0, N(76), 0, 0, 0,
+      N(72), 0, 0, N(76), 0, 0, N(77), 0, 0, 0, N(76), 0, N(72), 0, 0, 0,
+      N(74), 0, 0, N(78), 0, 0, N(79), 0, 0, 0, N(78), 0, N(74), 0, 0, 0,
+      N(71), 0, 0, N(74), 0, 0, N(76), 0, 0, 0, N(80), 0, N(83), 0, 0, 0],
   },
   garden: {
     chords: [[N(62), N(66), N(69)], [N(59), N(62), N(66)], [N(67), N(71), N(74)], [N(69), N(73), N(76)]],

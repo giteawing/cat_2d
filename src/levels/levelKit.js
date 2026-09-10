@@ -1,10 +1,11 @@
 // Helpers used by level definitions to build content in tile units.
 import { TILE } from '../core/util.js';
 import { makeProp, scatter, PROPS } from '../physics/props.js';
-import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate } from '../puzzles/puzzles.js';
+import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver } from '../puzzles/puzzles.js';
 import { Gift } from '../gifts/gift.js';
 
 export const px = (t) => t * TILE;
+const DIRS = { right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] };
 
 /** Build-context passed to level.setup(k). All coordinates are tile units unless noted. */
 export class LevelKit {
@@ -52,6 +53,18 @@ export class LevelKit {
   trigger(tx, ty, w, h, fn, opts = {}) { const t = new Trigger(px(tx), px(ty), px(w), px(h), fn, opts); this.game.puzzles.push(t); return t; }
   /** Switchable electric field: ON while `requires` is not met (default) — a plate/lever/button switches it off. */
   fieldGate(tx, ty, w, h, requires, opts = {}) { const f = new FieldGate(tx, ty, w, h, requires, opts); this.game.puzzles.push(f); return f; }
+  /** Laser emitter mounted on the wall behind the EMPTY tile (tx,ty), firing `dir` ('right'|'left'|'up'|'down'). */
+  laser(tx, ty, dir, opts = {}) {
+    const v = DIRS[dir]; if (!v) throw new Error('laser dir ' + dir);
+    const l = new Laser(px(tx) + TILE / 2 - v[0] * (TILE / 2 - 1), px(ty) + TILE / 2 - v[1] * (TILE / 2 - 1), v[0], v[1], opts);
+    this.game.puzzles.push(l); return l;
+  }
+  /** Laser receiver in the EMPTY tile (tx,ty) mounted on the wall opposite to `face` (the side the beam comes from). */
+  receiver(tx, ty, channel, opts = {}) {
+    const v = DIRS[opts.face || 'up'];
+    const r = new LaserReceiver(px(tx) + TILE / 2 - v[0] * 6, px(ty) + TILE / 2 - v[1] * 6, channel, { nx: v[0], ny: v[1], ...opts });
+    this.game.puzzles.push(r); return r;
+  }
   fan(tx, ty, w, h, opts = {}) { const f = new Fan(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(f); return f; }
 
   gift(tx, ty, type = 'normal', id = null) {

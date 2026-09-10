@@ -1,9 +1,10 @@
-// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate.
+// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver.
 // Components communicate through named "channels": an activator sets channel[name] = true/false,
 // and receivers read the channel each frame. Multiple activators can be AND-ed by a door.
 import { TILE, clamp, lerp } from '../core/util.js';
 import { Body, BodyType } from '../physics/body.js';
 import { T } from '../physics/tilemap.js';
+import { PORTAL_HALF } from '../portals/portalManager.js';
 
 export class Channels {
   constructor() { this.map = new Map(); }
@@ -310,4 +311,154 @@ export class FieldGate {
     if (!this.on && this.t > 0.02) { ctx.globalAlpha = this.t * 0.35; ctx.fillStyle = '#8FE3FF'; ctx.fillRect(this.x + 8, this.y, this.w - 16, this.h); }   // fading afterglow
     ctx.restore();
   }
+}
+
+/**
+ * Laser: a wall-mounted emitter that shoots a red beam in direction (dx,dy). The beam
+ *  - stops at solid tiles (grates and electric fields let it pass),
+ *  - is reflected 90° by 'mirror' props (mirrorDir +1 = '/', -1 = '\\'),
+ *  - travels through linked portals (position & direction transformed),
+ *  - is blocked by other bodies (a crate can shield a receiver), the cat included (harmless: no damage in this game),
+ *  - powers every LaserReceiver it hits. `requires` (optional) switches the emitter on/off by channel.
+ */
+export class Laser {
+  constructor(x, y, dx, dy, opts = {}) {
+    this.x = x; this.y = y; this.dx = Math.sign(dx); this.dy = Math.sign(dy);
+    this.requires = opts.requires || null; this.inverted = !!opts.inverted;
+    this.on = false; this.segments = []; this.hitBodies = new Set();
+    this.color = opts.color || '#FF4A4A';
+  }
+  update(dt, game) {
+    let on = !this.requires || game.channels.test(this.requires); if (this.inverted) on = !on;
+    this.on = on; this.segments = []; this._skip = null;
+    for (const b of this.hitBodies) b.laserLit = false; this.hitBodies.clear();
+    if (!on) return;
+    const map = game.map, world = game.world, portals = game.portals;
+    let ox = this.x, oy = this.y, dx = this.dx, dy = this.dy;
+    const passShot = (cx, cy) => { const t = map.get(cx, cy); return map.blocksShot(t) && !map.isField(t); };
+    for (let bounce = 0; bounce < 12; bounce++) {
+      // nearest tile hit (ignoring the tiles of a portal aperture on the beam's way — handled below) and nearest body hit
+      const tileHit = map.raycast(ox, oy, dx, dy, 4000, null, passShot);
+      const maxD = tileHit ? tileHit.dist : 4000;
+      let bodyHit = null;
+      for (const b of world.bodies) {
+        if (b.dead || b.type === BodyType.KINEMATIC) continue;
+        if (b === this._skip || b.kind === 'cat') continue;   // the cat never blocks a beam (no damage, no confusion)
+        // mirrors get a forgiving 8 px margin so the cube does not have to sit exactly under the beam
+        const t = rayBoxT(ox, oy, dx, dy, b.kind === 'mirror' ? padBox(b, 8) : b, bodyHit ? bodyHit.dist : maxD);
+        if (t !== null && t > 0.5) bodyHit = { dist: t, body: b };
+      }
+      // receivers (not physics bodies) and closed doors
+      for (const q of game.puzzles) {
+        const b = q instanceof LaserReceiver ? q.box : (q instanceof Door ? q.body : null);
+        if (!b) continue;
+        const t = rayBoxT(ox, oy, dx, dy, b, bodyHit ? bodyHit.dist : maxD);
+        if (t !== null && t > 0.5) bodyHit = { dist: t, body: b, receiver: q instanceof LaserReceiver ? q : null };
+      }
+      // portal on the way? (beam crosses a portal plane inside its span)
+      let portalHit = null;
+      if (portals && portals.linked) {
+        for (const p of portals.pair) {
+          const denom = dx * p.nx + dy * p.ny; if (denom >= 0) continue;   // must travel INTO the portal (against its normal)
+          const t = ((p.x - ox) * p.nx + (p.y - oy) * p.ny) / denom;
+          if (t < 0.5 || t > (bodyHit ? bodyHit.dist : maxD) + 1) continue;
+          const hx = ox + dx * t, hy = oy + dy * t;
+          if (Math.abs(p.along(hx, hy)) > PORTAL_HALF) continue;
+          if (!portalHit || t < portalHit.dist) portalHit = { dist: t, portal: p, hx, hy };
+        }
+      }
+      if (portalHit && (!bodyHit || portalHit.dist <= bodyHit.dist)) {
+        // the portal "focuses" the beam: it enters anywhere within the aperture and leaves from the other portal's centre
+        // (forgiving for puzzles — no pixel-perfect portal placement needed)
+        const a = portalHit.portal, b = portals.other(a), tr = portals.transform(a, b);
+        this.segments.push({ x0: ox, y0: oy, x1: a.x, y1: a.y }); this._skip = null;
+        const v = tr.vec(dx, dy); dx = Math.sign(Math.round(v.x)); dy = Math.sign(Math.round(v.y));
+        ox = b.x + b.nx * 2; oy = b.y + b.ny * 2;
+        continue;
+      }
+      if (bodyHit) {
+        const b = bodyHit.body, hx = ox + dx * bodyHit.dist, hy = oy + dy * bodyHit.dist;
+        this.segments.push({ x0: ox, y0: oy, x1: hx, y1: hy });
+        b.laserLit = true; this.hitBodies.add(b);
+        if (bodyHit.receiver) { bodyHit.receiver.hit = true; break; }
+        if (b.kind === 'mirror') {
+          // '/' : (1,0)→(0,-1), (0,1)→(-1,0), (-1,0)→(0,1), (0,-1)→(1,0);   '\\' : (1,0)→(0,1), (0,-1)→(-1,0), (-1,0)→(0,-1), (0,1)→(1,0)
+          const m = b.mirrorDir || 1;
+          const ndx = m > 0 ? -dy : dy, ndy = m > 0 ? -dx : dx;
+          dx = ndx; dy = ndy;
+          // restart the beam from the mirror centre (nicer look) and skip this mirror for the next cast
+          this.segments[this.segments.length - 1].x1 = b.cx; this.segments[this.segments.length - 1].y1 = b.cy;
+          ox = b.cx; oy = b.cy; this._skip = b;
+          continue;
+        }
+        break;
+      }
+      const ex = tileHit ? tileHit.x : ox + dx * 4000, ey = tileHit ? tileHit.y : oy + dy * 4000;
+      this.segments.push({ x0: ox, y0: oy, x1: ex, y1: ey });
+      break;
+    }
+  }
+  draw(ctx, time) {
+    // emitter housing
+    ctx.save();
+    ctx.translate(this.x, this.y); ctx.rotate(Math.atan2(this.dy, this.dx));
+    ctx.fillStyle = '#3D4854'; ctx.fillRect(-14, -9, 16, 18);
+    ctx.fillStyle = '#2A313A'; ctx.fillRect(-2, -5, 6, 10);
+    ctx.fillStyle = this.on ? this.color : '#7A3A3A'; ctx.beginPath(); ctx.arc(2, 0, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    if (!this.on) return;
+    const pulse = 0.85 + 0.15 * Math.sin(time * 30);
+    ctx.save(); ctx.lineCap = 'round';
+    for (const s of this.segments) {
+      ctx.strokeStyle = `rgba(255,70,70,${0.25 * pulse})`; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,120,120,${0.9 * pulse})`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,240,240,0.9)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      // impact glow at the end
+      ctx.fillStyle = `rgba(255,140,140,${0.7 * pulse})`; ctx.beginPath(); ctx.arc(s.x1, s.y1, 4 + Math.sin(time * 40), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/** LaserReceiver: a wall-mounted sensor; sets its channel while a beam hits it. `latch` keeps it on. */
+export class LaserReceiver {
+  constructor(x, y, channel, opts = {}) {
+    // latch (default): once lit the receiver stays on — the cat crossing a beam must never lock a door behind it
+    this.x = x; this.y = y; this.channel = channel; this.on = false; this.latch = opts.latch ?? true; this.t = 0; this.hit = false;
+    this.nx = opts.nx ?? 0; this.ny = opts.ny ?? -1;   // which way the sensor faces (for drawing)
+    // sensor box used by Laser ray tests (not a physics body); generous: roughly one tile
+    const hs = (opts.size || 30) / 2;
+    this.size = hs * 2;
+    this.box = { x: x - hs, y: y - hs, w: hs * 2, h: hs * 2, get right() { return this.x + this.w; }, get bottom() { return this.y + this.h; }, kind: 'receiver' };
+  }
+  update(dt, game) {
+    const hit = this.hit; this.hit = false;
+    const now = this.latch ? (this.on || hit) : hit;
+    if (now !== this.on) { this.on = now; game.sfx(now ? 'laserOn' : 'laserOff'); }
+    game.channels.set(this.channel, this.on);
+    this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 10));
+  }
+  draw(ctx, time) {
+    // drawn in a local frame where -y points along the facing normal (towards the incoming beam)
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Math.atan2(this.ny, this.nx) + Math.PI / 2);
+    const hw = this.size / 2;
+    ctx.fillStyle = '#3D4854'; ctx.fillRect(-hw, -2, hw * 2, 12);          // base plate on the wall
+    ctx.fillStyle = '#2A313A'; ctx.beginPath(); ctx.moveTo(-hw + 2, -2); ctx.lineTo(hw - 2, -2); ctx.lineTo(hw * 0.6, -10); ctx.lineTo(-hw * 0.6, -10); ctx.closePath(); ctx.fill();   // dish
+    // target rings so the player sees the sensitive area
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(-hw + 0.5, -hw + 0.5, hw * 2 - 1, hw * 2 - 1);
+    const c = this.on ? `rgba(120,255,140,${0.8 + 0.2 * Math.sin(time * 12)})` : `rgba(255,90,90,${0.6 + 0.2 * Math.sin(time * 4)})`;
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, -6, 4, 0, Math.PI * 2); ctx.fill();
+    if (this.on) { ctx.shadowColor = '#7EFF9A'; ctx.shadowBlur = 12; ctx.fill(); }
+    ctx.restore();
+  }
+}
+
+function padBox(b, p) { return { x: b.x - p, y: b.y - p, w: b.w + 2 * p, h: b.h + 2 * p, right: b.right + p, bottom: b.bottom + p }; }
+// ray vs body AABB (slab test); returns distance or null
+function rayBoxT(ox, oy, dx, dy, b, maxT) {
+  let tmin = -Infinity, tmax = Infinity;
+  if (Math.abs(dx) < 1e-9) { if (ox < b.x || ox > b.right) return null; } else { let t1 = (b.x - ox) / dx, t2 = (b.right - ox) / dx; if (t1 > t2) [t1, t2] = [t2, t1]; tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2); }
+  if (Math.abs(dy) < 1e-9) { if (oy < b.y || oy > b.bottom) return null; } else { let t1 = (b.y - oy) / dy, t2 = (b.bottom - oy) / dy; if (t1 > t2) [t1, t2] = [t2, t1]; tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2); }
+  if (tmax < 0 || tmin > tmax || tmin > maxT) return null;
+  return Math.max(tmin, 0);
 }

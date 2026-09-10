@@ -6,6 +6,7 @@ import { World } from '../src/physics/world.js';
 import { PortalManager } from '../src/portals/portalManager.js';
 import { makeProp } from '../src/physics/props.js';
 import { Player } from '../src/characters/cat/player.js';
+import { Laser, LaserReceiver, Channels } from '../src/puzzles/puzzles.js';
 
 let fails = 0, passes = 0;
 function check(name, cond, info = '') { if (cond) { passes++; console.log('  ✓', name); } else { fails++; console.log('  ✗', name, info); } }
@@ -210,7 +211,7 @@ const R = [
   const { LEVELS } = await import('../src/levels/index.js');
   const { game, canvas } = await createGame();
   const d = new Driver(game, canvas);
-  check('world 1 has 8 levels', LEVELS.length === 8, `n=${LEVELS.length}`);
+  check('world 1 has 8 levels, world 2 has started', LEVELS.filter((L) => (L.world || 1) === 1).length === 8 && LEVELS.filter((L) => L.world === 2).length >= 1, `n=${LEVELS.length}`);
   for (let i = 0; i < LEVELS.length; i++) {
     const L = LEVELS[i];
     d.startLevel(i); d.step(30);
@@ -268,15 +269,65 @@ const R = [
     check('crate bounces on a field floor, then settles on it', bounced && b.onGround && near(b.bottom, 8 * TILE, 0.5) && Math.abs(b.vy) < 1, `bounced=${bounced} bottom=${b.bottom} vy=${b.vy}`); }
 }
 
-// ------------------------------------------------------------ world summary screen after the last level
+// ------------------------------------------------------------ lasers, mirrors, receivers (World 2)
+{
+  console.log('Lasers: beam, mirror, receiver, portals, blocking');
+  const { map, world, portals } = room(R);
+  const game = { map, world, portals, channels: new Channels(), puzzles: [], sfx() {} };
+  const L = new Laser(1.5 * TILE, 10.5 * TILE, 1, 0); const rc = new LaserReceiver(10.5 * TILE, 6.5 * TILE, 'lz', { nx: 0, ny: 1, latch: false });
+  game.puzzles.push(L, rc);
+  const step = (n = 1) => { for (let i = 0; i < n; i++) { world.step(1 / 60); for (const q of game.puzzles) q.update(1 / 60, game); } };
+  step(5);
+  const end = () => L.segments[L.segments.length - 1];
+  check('beam runs straight to the far wall', L.segments.length === 1 && near(end().x1, 19 * TILE, 0.5), JSON.stringify(L.segments));
+  const m = world.add(makeProp('mirror', 10 * TILE, 11 * TILE, { dir: 1 })); step(10);
+  check("'/' mirror bends a rightward beam upwards", L.segments.length === 2 && end().y1 < end().y0, JSON.stringify(L.segments));
+  check('receiver above the mirror is lit → channel on', rc.on && game.channels.test('lz'));
+  m.mirrorDir = -1; step(2);
+  check("'\\' mirror bends it downwards, receiver goes dark (non-latching)", end().y1 > end().y0 && !rc.on && !game.channels.test('lz'));
+  m.mirrorDir = 1; step(2);
+  const rl = new LaserReceiver(3.5 * TILE, 2.5 * TILE, 'lz2', { nx: 1, ny: 0 }); game.puzzles.push(rl);
+  portals.shoot('blue', 10.5 * TILE, 5 * TILE, 0, -1, null); portals.shoot('orange', 5 * TILE, 2.5 * TILE, 1, 0, null);
+  rc.box.y = -100; step(2);   // move the first receiver out of the way
+  check('beam enters the ceiling portal and leaves the wall portal', L.segments.length === 3 && near(end().y0, portals.orange.y, 3) && end().x1 < end().x0, JSON.stringify(L.segments));
+  check('receiver behind the portals is lit', rl.on && game.channels.test('lz2'));
+  portals.blue.active = false; step(2);
+  check('latching receiver stays on after the beam is gone', rl.on && game.channels.test('lz2'));
+  const c = world.add(makeProp('crate', 5 * TILE, 11 * TILE)); step(10);
+  check('a crate blocks the beam (and is marked lit)', L.segments.length === 1 && near(end().x1, c.x, 1) && c.laserLit === true, JSON.stringify(L.segments));
+  c.dead = true; step(2);
+  const cat = new Player(6 * TILE, 9 * TILE); world.add(cat.body); step(10);
+  check('the cat never blocks a beam', L.segments.length >= 2 && end().x0 > 9 * TILE, JSON.stringify(L.segments));
+}
+{
+  console.log('Level 2-1: mirror flip with E, receiver latch');
+  const { LEVELS } = await import('../src/levels/index.js');
+  const idx = LEVELS.findIndex((L) => L.id === 'w2l1');
+  const { game, canvas } = await createGame(); const d = new Driver(game, canvas);
+  d.startLevel(idx); d.step(30);
+  check('level 2-1 loads with 4 lasers and the observatory theme', game.puzzles.filter((q) => q instanceof Laser).length === 4 && game.level.theme === 'observatory');
+  const m = game.world.bodies.find((b) => b.kind === 'mirror' && b.cx > 90 * TILE); const p = game.player.body;
+  m.x = 92 * TILE; p.x = 90.5 * TILE; p.y = 26 * TILE - p.h; p.vx = 0; d.step(40);
+  check("mirror under the beam ('/') lights the LEFT receiver", game.channels.test('r1') && !game.channels.test('r2'));
+  d.tap('KeyE'); d.step(20);
+  check('E next to the mirror flips it → RIGHT receiver, left stays latched', m.mirrorDir === -1 && game.channels.test('r1') && game.channels.test('r2'));
+  const door = game.puzzles.find((q) => q.requires === 'r1&r2'); d.step(60);
+  check('door D opens', door && door.open > 0.9, door && door.open);
+}
+
+// ------------------------------------------------------------ world summary screen after the last level of a world
 {
   console.log('World summary screen');
   const { LEVELS } = await import('../src/levels/index.js');
+  const last1 = LEVELS.map((L, i) => [L, i]).filter(([L]) => (L.world || 1) === 1).pop()[1];
   const { game, canvas } = await createGame(); const d = new Driver(game, canvas);
-  d.startLevel(LEVELS.length - 1); d.step(5); game.state = 'complete'; game.completeTimer = 2;
-  d.tap('Enter'); d.step(1); check('last level → world summary', game.state === 'worldDone', game.state);
+  d.startLevel(last1); d.step(5); game.state = 'complete'; game.completeTimer = 2;
+  d.tap('Enter'); d.step(1); check('last level of world 1 → world summary', game.state === 'worldDone' && game.worldDoneWorld === 1, game.state);
   let ok = true; try { d.step(90); } catch (e) { ok = false; console.log(e); } check('summary renders without errors', ok);
   d.tap('Enter'); d.step(2); check('Enter → level select', game.state === 'select', game.state);
+  d.startLevel(LEVELS.length - 1); d.step(5); game.state = 'complete'; game.completeTimer = 2; d.tap('Enter'); d.step(1);
+  check('last level of the campaign → world 2 summary', game.state === 'worldDone' && game.worldDoneWorld === 2, game.state + ' ' + game.worldDoneWorld);
+  ok = true; try { d.step(30); } catch (e) { ok = false; console.log(e); } check('world 2 summary renders', ok);
 }
 
 console.log(`\n${passes} passed, ${fails} failed`);

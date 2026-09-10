@@ -5,6 +5,7 @@ import { T } from '../physics/tilemap.js';
 export const THEMES = {
   house:   { bg1: '#F6E4C8', bg2: '#EFD2A6', wall: '#F0C98B', wallDark: '#D9A868', brick: '#C98C57', brickDark: '#A66D3E', mortar: '#E9C596', metal: '#5A6472', metalDark: '#3D444E', oneway: '#9A6B3E', ladder: '#8A5A2E', glass: 'rgba(170,215,240,0.55)', sky: ['#8EC5FC', '#E0C3FC'], accent: '#F28C4B' },
   lab:     { bg1: '#E4EBF2', bg2: '#CFD9E4', wall: '#E9EEF3', wallDark: '#C9D2DB', brick: '#9FB0C2', brickDark: '#7A8B9E', mortar: '#C7D3DF', metal: '#4B5563', metalDark: '#2F3742', oneway: '#7C8794', ladder: '#6E7A88', glass: 'rgba(170,215,240,0.55)', sky: ['#9BB8D4', '#DDE6EE'], accent: '#3D8BFF' },
+  observatory: { bg1: '#2B2F4A', bg2: '#3A3F60', wall: '#4A4F70', wallDark: '#33375A', brick: '#6A5A8A', brickDark: '#4C3F66', mortar: '#7C6E9C', metal: '#4B5563', metalDark: '#2F3742', oneway: '#8A7AAA', ladder: '#9A8AB8', glass: 'rgba(170,215,240,0.45)', sky: ['#0E1330', '#2A2050'], accent: '#FFD27A' },
   garden:  { bg1: '#DFF0D0', bg2: '#C8E2B4', wall: '#D9C7A3', wallDark: '#B8A47E', brick: '#B0885A', brickDark: '#8C6A40', mortar: '#D6BB92', metal: '#5A6472', metalDark: '#3D444E', oneway: '#8C6A40', ladder: '#7A5A2E', glass: 'rgba(170,215,240,0.55)', sky: ['#7EC8E3', '#FFF1C1'], accent: '#7ED37E' },
 };
 
@@ -68,6 +69,19 @@ export class TileRenderer {
     for (let y = -s; y < h + s; y += s) for (let x = -s; x < w + s; x += s) {
       ctx.beginPath(); ctx.arc(x + ox + s / 2, y + oy + s / 2, 5, 0, Math.PI * 2); ctx.fill();
       ctx.fillRect(x + ox + 8, y + oy + 8, 3, 3); ctx.fillRect(x + ox + s - 11, y + oy + s - 11, 3, 3);
+    }
+    // stars & a moon for the night observatory
+    if (this.themeName === 'observatory') {
+      for (let i = 0; i < 70; i++) {
+        const sx = ((i * 233 + px1 * 0.6) % (w + 40) + w + 40) % (w + 40) - 20;
+        const sy = ((i * 149 + py1 * 0.6) % (h + 40) + h + 40) % (h + 40) - 20;
+        const tw = 0.5 + 0.5 * Math.sin(time * (1.5 + (i % 5) * 0.4) + i);
+        ctx.fillStyle = `rgba(255,245,220,${0.35 + 0.5 * tw})`;
+        const r = 1 + (i % 3) * 0.6; ctx.fillRect(sx - r / 2, sy - r / 2, r, r);
+      }
+      const mx = w * 0.78 + px1 * 0.3, my = h * 0.22 + py1 * 0.3;
+      ctx.fillStyle = '#FFF1C8'; ctx.beginPath(); ctx.arc(mx, my, 34, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = th.sky[0]; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(mx - 14, my - 8, 30, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
     }
     // balloons / confetti accents for the house theme
     if (this.themeName === 'house') {

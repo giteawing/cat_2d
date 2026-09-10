@@ -52,6 +52,19 @@ Hints switch to gamepad labels automatically; rumble on throws, portals, gifts a
 7. **Квантовая лаборатория** — electric fields (`~` tiles: thin floor-to-ceiling walls, a field floor and a field ceiling) and the Quantum Tunneling mode (Q): 25% chance to run through a field, elastic bounce otherwise. Objects always bounce; portal shots pass through fields.
 8. **Генераторная** — switchable fields (`FieldGate`: a plate / button / lever powers a field down; `plD&levD` style AND-requirements), a field as an upper floor, portals through permanent fields, and a tunneling-only secret.
 
+After the last level of a world a **world summary** screen lists every level with its gifts and secrets.
+
+## World 2 — Обсерватория (in progress)
+
+New mechanic: **lasers**. `Laser` emitters shoot a red beam that stops at solid tiles (grates and fields let it pass),
+is bounced 90° by **mirror cubes** (a grabbable prop; `E` next to a cube flips its diagonal `/` ↔ `\`), travels through
+linked portals (in anywhere within the aperture, out of the other portal's centre) and powers `LaserReceiver`s.
+Receivers **latch** by default — once lit they stay on — so crossing a beam never locks a door behind the cat, and a
+single beam can light several receivers one after another. Crates and other props block beams; the cat never does.
+
+1. **Обсерватория** — crate out of the beam, mirror under a ceiling beam (wrong way round: flip it), beam through floor
+   portals to a ceiling receiver, a wall-portal secret, and a one-beam/two-receivers finale.
+
 Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
 
 ## Project layout
@@ -63,10 +76,10 @@ src/
   portals/     portalManager.js (placement, apertures, teleport transform), portalRenderer.js
   weapons/     weapons.js (Gravity Gun + Portal Gun, held models, switching)
   characters/  cat/player.js (controller + animation state), cat/catSprite.js (procedural cat)
-  puzzles/     puzzles.js (PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, Channels)
+  puzzles/     puzzles.js (PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Channels)
   gifts/       gift.js
-  levels/      mapBuilder.js, levelKit.js (level DSL), index.js (registry), world01/level0N.js
-  render/      tileRenderer.js (themes: house / lab / garden), effects.js
+  levels/      mapBuilder.js, levelKit.js (level DSL), index.js (registry), world01/level0N.js, world02/level0N.js
+  render/      tileRenderer.js (themes: house / lab / garden / observatory), effects.js
   ui/          hud.js
   audio/       audio.js (procedural WebAudio sfx + music)
 tools/
@@ -86,17 +99,18 @@ Cat idle flourishes (after a few seconds standing still): look around, stretch/y
 
 ### Adding a level
 
-Create `src/levels/world01/level09.js` (see existing ones: `buildMap()` with `MapBuilder`, then a `setup(k)` using the
-level kit: `k.prop`, `k.plate`, `k.door`, `k.lever`, `k.button`, `k.platform`, `k.fan`, `k.gift`, `k.secret`, `k.sign`,
-`k.message`, `k.funRoom`, `k.stack`, `k.decor`) and register it in `src/levels/index.js`.
+Create `src/levels/world02/level02.js` (see existing ones: `buildMap()` with `MapBuilder`, then a `setup(k)` using the
+level kit: `k.prop`, `k.plate`, `k.door`, `k.lever`, `k.button`, `k.platform`, `k.fan`, `k.fieldGate`, `k.laser(tx,ty,dir)`,
+`k.receiver(tx,ty,channel,{face})`, `k.gift`, `k.secret`, `k.sign`, `k.message`, `k.funRoom`, `k.stack`, `k.decor`) and register it
+in `src/levels/index.js` (`world: 2, number: N` — the world summary appears after the last level of each world).
 Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b')` (also `a|b`, `!a`).
 
 ## Tests
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 99 checks
-npm run walk                # plays all 8 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
+cd .. && npm test           # 123 checks
+npm run walk                # plays all 9 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
 `tools/walkthroughs/levelNN.mjs` are the per-level scripts (each prints ✓/✗ per step and a final RESULT line); `lib.mjs` holds the shared helpers (walkTo, runJump, climbTo, peekAimClick, grab/dropAt/throwAt, enter…).

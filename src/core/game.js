@@ -105,8 +105,9 @@ export class Game {
   restartLevel() { this.loadLevel(this.levelIndex, { keepMessage: true }); }
 
   nextLevel() {
-    if (this.levelIndex + 1 < LEVELS.length) this.loadLevel(this.levelIndex + 1);
-    else { this.state = 'worldDone'; this.worldDoneTimer = 0; this.audio.play('gift'); }
+    const cur = LEVELS[this.levelIndex], next = LEVELS[this.levelIndex + 1];
+    if (next && (next.world || 1) === (cur.world || 1)) this.loadLevel(this.levelIndex + 1);
+    else { this.state = 'worldDone'; this.worldDoneWorld = cur.world || 1; this.worldDoneTimer = 0; this.audio.play('gift'); }
   }
   updateWorldDone(dt, inp) {
     this.time += dt; this.worldDoneTimer += dt;
@@ -126,14 +127,15 @@ export class Game {
     ctx.globalAlpha = a;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = 'bold 40px "Trebuchet MS", sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(40,10,40,0.6)';
-    ctx.strokeText('Мир 1 пройден!', VIEW_W / 2, 50); ctx.fillStyle = '#FFE9B8'; ctx.fillText('Мир 1 пройден!', VIEW_W / 2, 50);
+    const wn = this.worldDoneWorld || 1, title = `Мир ${wn} пройден!`;
+    ctx.strokeText(title, VIEW_W / 2, 50); ctx.fillStyle = '#FFE9B8'; ctx.fillText(title, VIEW_W / 2, 50);
     // the cat, happy
     const cat = this.worldCat || (this.worldCat = makeTitleCat()); cat.animTime += 1 / 60; cat.emote = 'happy'; cat.emoteTimer = 1; cat.facing = 1; cat.aimX = 1; cat.body.cx = 110; cat.body.bottom = 300;
     ctx.save(); ctx.translate(110, 300); ctx.scale(1.6, 1.6); ctx.translate(-110, -300);
     drawCat(ctx, cat, this.time, { kind: 'portal', swapT: 1, recoil: 0, charge: 0, holding: false, lastColor: 'orange', localAngle: -0.4 });
     ctx.restore();
     // table
-    const world = LEVELS.filter((L) => (L.world || 1) === 1);
+    const world = LEVELS.filter((L) => (L.world || 1) === wn);
     const rowH = 26, x0 = VIEW_W / 2 - 240, y0 = 100;
     ctx.font = 'bold 13px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'left';
     ctx.fillText('Уровень', x0, y0); ctx.textAlign = 'center'; ctx.fillText('Подарки', x0 + 420, y0); ctx.fillText('Секреты', x0 + 540, y0);
@@ -337,6 +339,25 @@ export class Game {
     if (inp.pause) { this.state = 'select'; this.menuIndex = this.levelIndex; }
   }
 
+  /** Mirror cubes: standing next to one (not holding anything) and pressing E flips its diagonal. */
+  updateMirrors(inp) {
+    const p = this.player.body;
+    let best = null, bestD = Infinity;
+    for (const b of this.world.bodies) {
+      if (b.dead || b.kind !== 'mirror' || b.held) continue;
+      const d = Math.hypot(b.cx - p.cx, b.cy - p.cy);
+      if (d < 72 && d < bestD) { best = b; bestD = d; }
+    }
+    if (!best) return;
+    this.interactables.push({ x: best.cx, y: best.y - 4, near: true, label: 'E' });
+    if (inp.interactPressed && !this.weapons.held) {
+      inp.interactPressed = false;
+      best.mirrorDir = -(best.mirrorDir || 1); best.wake();
+      this.sfx('mirrorFlip');
+      this.effects.burst({ x: best.cx, y: best.cy }, '#CFE8FF', 6, 120);
+    }
+  }
+
   updatePlaying(dt, inp) {
     if (inp.pause) { this.state = 'paused'; this.menuIndex = 0; return; }
     if (inp.restart) { this.restartLevel(); return; }
@@ -364,6 +385,7 @@ export class Game {
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < 8) {
+      this.updateMirrors(inp);
       for (const p of this.puzzles) p.update(FIXED_DT, this);
       this.world.step(FIXED_DT);
       this.accumulator -= FIXED_DT; steps++;
@@ -622,7 +644,7 @@ export class Game {
     const s = this.save.level(this.level.id);
     if (s.secrets.length) ctx.fillText(`Секреты: ${s.secrets.length}`, VIEW_W / 2, VIEW_H / 2 + 10);
     if (this.brokenCount) { ctx.font = '14px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText(`Разбито предметов: ${this.brokenCount}`, VIEW_W / 2, VIEW_H / 2 + 40); }
-    if (this.completeTimer > 0.8 && Math.sin(this.completeTimer * 6) > -0.3) { ctx.font = 'bold 18px "Trebuchet MS", sans-serif'; ctx.fillStyle = '#FFD08A'; ctx.fillText(this.levelIndex + 1 < LEVELS.length ? 'Enter — следующий уровень' : 'Enter — к выбору уровня', VIEW_W / 2, VIEW_H / 2 + 90); }
+    if (this.completeTimer > 0.8 && Math.sin(this.completeTimer * 6) > -0.3) { ctx.font = 'bold 18px "Trebuchet MS", sans-serif'; ctx.fillStyle = '#FFD08A'; const nx = LEVELS[this.levelIndex + 1]; ctx.fillText(nx && (nx.world || 1) === (LEVELS[this.levelIndex].world || 1) ? 'Enter — следующий уровень' : 'Enter — итоги мира', VIEW_W / 2, VIEW_H / 2 + 90); }
     ctx.globalAlpha = 1;
   }
 

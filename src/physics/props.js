@@ -12,6 +12,7 @@ export const PROPS = {
   cube:    { w: 30, h: 30, mass: 3, friction: 0.7, bounce: 0.05, material: 'metal', portalable: true, colors: ['#8FA3B8'] },
   barrel:  { w: 30, h: 40, mass: 5, friction: 0.55, bounce: 0.08, material: 'metal', portalable: true, colors: ['#5D7CA6', '#A65D5D'] },
   metalBox:{ w: 28, h: 28, mass: 4, friction: 0.65, bounce: 0.05, material: 'metal', portalable: true, colors: ['#6B7A8C'] },
+  mirror:  { w: 32, h: 32, mass: 3, friction: 0.8, bounce: 0.02, material: 'metal', portalable: true, colors: ['#DDE8F2'] },   // reflects lasers 90° (facing = mirror diagonal)
   // ---- fun clutter ----
   box:     { w: 26, h: 22, mass: 1.2, friction: 0.7, bounce: 0.05, material: 'wood', colors: ['#C9A46A', '#D7B37A', '#B8935A'] },
   smallBox:{ w: 18, h: 16, mass: 0.6, friction: 0.7, bounce: 0.08, material: 'wood', colors: ['#D7B37A', '#E0C08C'] },
@@ -53,6 +54,7 @@ export function makeProp(kind, x, y, opts = {}) {
   b.variant = Math.floor(rnd() * 4);
   b.breakSpeed = opts.breakSpeed || 520;
   b.tag = opts.tag || '';
+  if (kind === 'mirror') { b.mirrorDir = opts.dir || 1; b.rolls = false; }
   return b;
 }
 
@@ -66,6 +68,24 @@ export function drawProp(ctx, b, time) {
   const dark = shade(c, 0.72), light = shade(c, 1.2);
   ctx.lineJoin = 'round';
   switch (b.kind) {
+    case 'mirror': {
+      // a metal cube with a diagonal mirror; b.mirrorDir = +1 → '/' , -1 → '\\' (flip with E while held / on hit)
+      ctx.fillStyle = '#6B7A8C'; rr(ctx, x, y, w, h, 4); ctx.fill();
+      ctx.strokeStyle = '#3D4854'; ctx.lineWidth = 2; rr(ctx, x + 1, y + 1, w - 2, h - 2, 3); ctx.stroke();
+      const dir = b.mirrorDir || 1;
+      ctx.save(); ctx.beginPath(); rr(ctx, x + 3, y + 3, w - 6, h - 6, 2); ctx.clip();
+      ctx.fillStyle = '#2B3540';
+      ctx.beginPath(); if (dir > 0) { ctx.moveTo(x, y + h); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h); } else { ctx.moveTo(x, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); } ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = '#EAF6FF'; ctx.lineWidth = 3; ctx.beginPath();
+      if (dir > 0) { ctx.moveTo(x + 4, y + h - 4); ctx.lineTo(x + w - 4, y + 4); } else { ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + w - 4, y + h - 4); }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(120,200,255,0.9)'; ctx.lineWidth = 1; ctx.beginPath();
+      if (dir > 0) { ctx.moveTo(x + 6, y + h - 8); ctx.lineTo(x + w - 8, y + 6); } else { ctx.moveTo(x + 6, y + 8); ctx.lineTo(x + w - 8, y + h - 6); }
+      ctx.stroke();
+      if (b.laserLit) { ctx.shadowColor = '#FF6060'; ctx.shadowBlur = 10; ctx.strokeStyle = 'rgba(255,120,120,0.8)'; ctx.lineWidth = 2; rr(ctx, x + 1, y + 1, w - 2, h - 2, 3); ctx.stroke(); }
+      break;
+    }
     case 'crate': case 'bigCrate': case 'box': case 'smallBox': {
       ctx.fillStyle = c; rr(ctx, x, y, w, h, 3); ctx.fill();
       ctx.strokeStyle = dark; ctx.lineWidth = 2; rr(ctx, x + 1, y + 1, w - 2, h - 2, 2); ctx.stroke();
