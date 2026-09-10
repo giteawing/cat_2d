@@ -268,5 +268,16 @@ const R = [
     check('crate bounces on a field floor, then settles on it', bounced && b.onGround && near(b.bottom, 8 * TILE, 0.5) && Math.abs(b.vy) < 1, `bounced=${bounced} bottom=${b.bottom} vy=${b.vy}`); }
 }
 
+// ------------------------------------------------------------ world summary screen after the last level
+{
+  console.log('World summary screen');
+  const { LEVELS } = await import('../src/levels/index.js');
+  const { game, canvas } = await createGame(); const d = new Driver(game, canvas);
+  d.startLevel(LEVELS.length - 1); d.step(5); game.state = 'complete'; game.completeTimer = 2;
+  d.tap('Enter'); d.step(1); check('last level → world summary', game.state === 'worldDone', game.state);
+  let ok = true; try { d.step(90); } catch (e) { ok = false; console.log(e); } check('summary renders without errors', ok);
+  d.tap('Enter'); d.step(2); check('Enter → level select', game.state === 'select', game.state);
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

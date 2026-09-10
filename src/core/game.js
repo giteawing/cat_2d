@@ -106,7 +106,56 @@ export class Game {
 
   nextLevel() {
     if (this.levelIndex + 1 < LEVELS.length) this.loadLevel(this.levelIndex + 1);
-    else { this.state = 'select'; this.menuIndex = 0; }
+    else { this.state = 'worldDone'; this.worldDoneTimer = 0; this.audio.play('gift'); }
+  }
+  updateWorldDone(dt, inp) {
+    this.time += dt; this.worldDoneTimer += dt;
+    if (this.worldDoneTimer > 1 && (inp.enter || inp.lmbPressed || inp.pause)) { this.audio.play('ui'); this.state = 'select'; this.menuIndex = 0; }
+  }
+  /** World summary: per-level gifts & secrets, totals. */
+  renderWorldDone(ctx) {
+    const a = Math.min(1, this.worldDoneTimer * 1.5);
+    const g = ctx.createLinearGradient(0, 0, 0, VIEW_H); g.addColorStop(0, '#2B1B4A'); g.addColorStop(1, '#6B3B7A');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // confetti
+    for (let i = 0; i < 60; i++) {
+      const t = this.time * (0.6 + (i % 5) * 0.12) + i * 7.3;
+      const x = ((i * 137 + Math.sin(t) * 40) % VIEW_W + VIEW_W) % VIEW_W, y = ((t * 60 + i * 91) % (VIEW_H + 40)) - 20;
+      ctx.fillStyle = ['#F25C5C', '#F2C14B', '#7ED37E', '#5BC0DE', '#F28CC8'][i % 5]; ctx.save(); ctx.translate(x, y); ctx.rotate(t * 3); ctx.fillRect(-4, -2, 8, 4); ctx.restore();
+    }
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 40px "Trebuchet MS", sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(40,10,40,0.6)';
+    ctx.strokeText('Мир 1 пройден!', VIEW_W / 2, 50); ctx.fillStyle = '#FFE9B8'; ctx.fillText('Мир 1 пройден!', VIEW_W / 2, 50);
+    // the cat, happy
+    const cat = this.worldCat || (this.worldCat = makeTitleCat()); cat.animTime += 1 / 60; cat.emote = 'happy'; cat.emoteTimer = 1; cat.facing = 1; cat.aimX = 1; cat.body.cx = 110; cat.body.bottom = 300;
+    ctx.save(); ctx.translate(110, 300); ctx.scale(1.6, 1.6); ctx.translate(-110, -300);
+    drawCat(ctx, cat, this.time, { kind: 'portal', swapT: 1, recoil: 0, charge: 0, holding: false, lastColor: 'orange', localAngle: -0.4 });
+    ctx.restore();
+    // table
+    const world = LEVELS.filter((L) => (L.world || 1) === 1);
+    const rowH = 26, x0 = VIEW_W / 2 - 240, y0 = 100;
+    ctx.font = 'bold 13px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'left';
+    ctx.fillText('Уровень', x0, y0); ctx.textAlign = 'center'; ctx.fillText('Подарки', x0 + 420, y0); ctx.fillText('Секреты', x0 + 540, y0);
+    let tg = 0, tgMax = 0, ts = 0;
+    world.forEach((L, i) => {
+      const s = this.save.level(L.id); const y = y0 + rowH * (i + 1);
+      const secretsTotal = L.secretCount ?? 0;
+      tg += s.gifts.length; tgMax += L.giftCount; ts += s.secrets.length;
+      const full = s.gifts.length >= L.giftCount;
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)'; ctx.fillRect(x0 - 10, y - rowH / 2, 600, rowH);
+      ctx.font = '14px "Trebuchet MS", sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.fillText(`${L.world}-${L.number}  ${L.name}`, x0, y);
+      ctx.textAlign = 'center';
+      for (let k = 0; k < L.giftCount; k++) { ctx.globalAlpha = a * (k < s.gifts.length ? 1 : 0.18); drawGiftBox(ctx, x0 + 420 - (L.giftCount - 1) * 9 + k * 18 - 7, y - 7, 14, 13, GIFT_TYPES.normal, this.time); ctx.globalAlpha = a; }
+      ctx.fillStyle = full ? '#B8F0C0' : '#fff'; ctx.font = 'bold 12px "Trebuchet MS", sans-serif'; ctx.fillText(`${s.gifts.length}/${L.giftCount}`, x0 + 480, y);
+      ctx.fillStyle = s.secrets.length ? '#FFD08A' : 'rgba(255,255,255,0.4)'; ctx.fillText(s.secrets.length ? '★'.repeat(s.secrets.length) : '—', x0 + 540, y);
+    });
+    const y = y0 + rowH * (world.length + 1) + 10;
+    ctx.font = 'bold 16px "Trebuchet MS", sans-serif'; ctx.fillStyle = '#FFE9B8'; ctx.textAlign = 'center';
+    ctx.fillText(`Всего: ${tg} / ${tgMax} подарков  ·  ${ts} секретов`, VIEW_W / 2, y);
+    if (tg >= tgMax) { ctx.fillStyle = '#B8F0C0'; ctx.font = '14px "Trebuchet MS", sans-serif'; ctx.fillText('Все подарки мира собраны — ты идеальный кот!', VIEW_W / 2, y + 24); }
+    if (this.worldDoneTimer > 1 && Math.sin(this.time * 6) > -0.3) { ctx.font = 'bold 16px "Trebuchet MS", sans-serif'; ctx.fillStyle = '#FFD08A'; ctx.fillText('Enter — к выбору уровня', VIEW_W / 2, VIEW_H - 30); }
+    ctx.globalAlpha = 1;
   }
 
   // ------------------------------------------------------------------ events
@@ -213,6 +262,7 @@ export class Game {
       case 'playing': this.updatePlaying(dt, inp); break;
       case 'paused': this.updatePaused(inp); break;
       case 'complete': this.updateComplete(dt, inp); break;
+      case 'worldDone': this.updateWorldDone(dt, inp); break;
     }
     this.render();
     this.input.endFrame();
@@ -388,6 +438,7 @@ export class Game {
     switch (this.state) {
       case 'title': this.renderTitle(ctx); break;
       case 'select': this.renderSelect(ctx); break;
+      case 'worldDone': this.renderWorldDone(ctx); break;
       default: this.renderWorld(ctx); this.hud.draw(ctx, this, VIEW_W, VIEW_H);
         if (this.state === 'paused') this.renderPause(ctx);
         if (this.state === 'complete') this.renderComplete(ctx);
