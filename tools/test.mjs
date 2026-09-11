@@ -6,7 +6,7 @@ import { World } from '../src/physics/world.js';
 import { PortalManager } from '../src/portals/portalManager.js';
 import { makeProp } from '../src/physics/props.js';
 import { Player } from '../src/characters/cat/player.js';
-import { Laser, LaserReceiver, Channels } from '../src/puzzles/puzzles.js';
+import { Laser, LaserReceiver, Channels, Medium } from '../src/puzzles/puzzles.js';
 
 let fails = 0, passes = 0;
 function check(name, cond, info = '') { if (cond) { passes++; console.log('  ✓', name); } else { fails++; console.log('  ✗', name, info); } }
@@ -333,6 +333,30 @@ const R = [
   check('E next to the mirror flips it → RIGHT receiver, left stays latched', m.mirrorDir === -1 && game.channels.test('r1') && game.channels.test('r2'));
   const door = game.puzzles.find((q) => q.requires === 'r1&r2'); d.step(60);
   check('door D opens', door && door.open > 0.9, door && door.open);
+}
+
+// ------------------------------------------------------------ refraction (optical media, level 2-4 finale)
+{
+  console.log('Refraction: optical medium bends a tilted beam (Snell), fades with its channel');
+  const { map, world, portals } = room(R); const ch = new Channels();
+  const game = { map, world, portals, channels: ch, puzzles: [], sfx() {} };
+  const ang = 50 * Math.PI / 180;
+  const L = new Laser(2 * TILE, 2 * TILE, Math.cos(ang), Math.sin(ang));      // down-right at 50° below horizontal
+  const M = new Medium(1 * TILE, 5 * TILE, 18 * TILE, 6 * TILE, { n: 1.5, requires: 'gas' });
+  game.puzzles.push(L, M);
+  const step = (n = 1) => { for (let i = 0; i < n; i++) { world.step(1 / 60); for (const q of game.puzzles) q.update(1 / 60, game); } };
+  step(5);
+  const end = () => L.segments[L.segments.length - 1];
+  const landEmpty = end().x1;
+  check('medium off: beam goes straight (one segment)', L.segments.length === 1 && M.n === 1, `${L.segments.length} n=${M.n}`);
+  ch.set('gas', true); step(400);
+  check('medium on: n → 1.5 and the beam splits at the surface (two segments)', near(M.n, 1.5, 0.01) && L.segments.length === 2, `n=${M.n} segs=${L.segments.length}`);
+  const s2 = end(); const dxdy = Math.atan2(s2.y1 - s2.y0, s2.x1 - s2.x0);
+  const i = Math.PI / 2 - ang, r = Math.asin(Math.sin(i) / 1.5);
+  check('refracted angle follows Snell (sin r = sin i / n)', near(Math.PI / 2 - dxdy, r, 0.01), `got ${(Math.PI / 2 - dxdy).toFixed(3)} want ${r.toFixed(3)}`);
+  check('beam lands closer to the normal (further left) in the dense medium', end().x1 < landEmpty - TILE, `${end().x1} vs ${landEmpty}`);
+  ch.set('gas', false); step(400);
+  check('medium off again: straight beam restored', L.segments.length === 1 && near(end().x1, landEmpty, 0.5), `${L.segments.length}`);
 }
 
 // ------------------------------------------------------------ world summary screen after the last level of a world

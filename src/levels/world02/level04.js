@@ -4,15 +4,17 @@
 //     it lands in the beam on the far side, then follow it
 //  C. one '/' mirror, one ceiling beam, two wall receivers at different heights: on the floor the beam goes left along
 //     the floor; lifted by the fan it goes left higher up
-//  D. finale: a mirror on a vertical lift catches a high beam and sends it down onto a floor mirror → right → receiver.
+//  D. a mirror on a vertical lift catches a high beam and sends it down onto a floor mirror → right → receiver.
 //     Secret: a third mirror in the resulting floor beam lights a ceiling receiver → lid in the floor
+//  E. finale — refraction: a tilted beam falls into a chamber; a valve fills it with an optically dense gas (n = 1.5),
+//     the beam bends towards the normal at the surface (Snell's law) and lands on the floor receiver
 import { MapBuilder } from '../mapBuilder.js';
 
 function buildMap() {
-  const m = new MapBuilder(121, 30);
-  m.rect(0, 0, 120, 12);                         // ceiling
-  m.rect(0, 26, 120, 29);                        // floor
-  m.col(0, 0, 29); m.col(120, 0, 29);
+  const m = new MapBuilder(152, 30);
+  m.rect(0, 0, 151, 12);                         // ceiling
+  m.rect(0, 26, 151, 29);                        // floor
+  m.col(0, 0, 29); m.col(151, 0, 29);
   // A (cols 1-27): fan column 8-10, gift shelf to its right
   m.rect(11, 18, 13, 18, '=');                   // landing shelf beside the fan column
   m.rect(27, 13, 28, 21);                        // wall above door A (rows 22-25)
@@ -30,6 +32,9 @@ function buildMap() {
   m.rect(104, 26, 105, 27, '.');                 // secret pit (lid = door 'sec')
   m.rect(109, 23, 110, 23, '=');                 // ledge: the third mirror waits here, out of the floor beam
   m.rect(114, 13, 115, 21);                      // wall above door D
+  // E (cols 116-150): refraction chamber (medium rows 17-26, cols 118-141), the exit beyond door E
+  m.rect(117, 13, 117, 13);                      // bracket for the tilted emitter in the ceiling corner
+  m.rect(144, 13, 145, 21);                      // wall above door E
   return m.lines();
 }
 
@@ -39,7 +44,7 @@ export const level04 = {
   theme: 'observatory',
   map: buildMap(),
   start: [3, 26],
-  exit: [117, 24],
+  exit: [148, 24],
   weapons: ['gravity', 'portal'],
   abilities: ['tunnel'],
   giftCount: 5,
@@ -94,8 +99,19 @@ export const level04 = {
     k.gift(104.5, 27, 'rare', 'g5');
     k.secret(104, 26, 2, 2, 's1');
     k.sign(106, 23, 'Третье зеркало? Когда луч пойдёт по полу, ему найдётся применение… посмотри на потолок.');
-    k.clutter(['cup', 'can', 'book'], 116, 26, 3, 234);
     k.decor('window', 104, 14, { w: 96, h: 80 }); k.decor('lampHang', 110, 13);
-    k.decor('poster', 117, 18, { w: 60, h: 28, text: 'ВЫХОД ↓', color: '#FFE9B8' });
+    // E: refraction. The beam leaves the ceiling corner at 50° below horizontal. Empty chamber: it lands on the floor
+    // at x≈128. Dense gas (n=1.5) from row 17 down: at the surface sin r = sin 40°/1.5 → r≈25°, the beam steepens and
+    // lands at x≈124.7 — right on the receiver.
+    k.sign(119, 23, 'Преломление! Вентиль заполняет камеру плотным газом (n = 1,5). Свет в нём медленнее, и на границе луч ЛОМАЕТСЯ — ближе к перпендикуляру. Смотри, куда он уйдёт.');
+    k.laser(118, 14, 50);
+    k.lever(121, 26, 'gasE');
+    k.medium(118, 17, 24, 9, { n: 1.5, requires: 'gasE', color: '#63C7D9', label: 'ПЛОТНЫЙ ГАЗ' });
+    k.receiver(124, 25, 'rE', { face: 'up', size: 34 });
+    k.door(144, 22, 2, 4, 'rE', { dir: 'up', travel: 4 * 32 });
+    k.sign(129, 23, 'Пустая камера: луч падает сюда, на пол. Полная: он приходит круче и левее. Угол входа один — разная плотность.');
+    k.clutter(['cup', 'can', 'book', 'jar'], 135, 26, 4, 234);
+    k.decor('poster', 136, 15, { w: 84, h: 28, text: 'n1 · sin i = n2 · sin r', color: '#C8F4FF' }); k.decor('lampHang', 129, 13);
+    k.decor('poster', 147, 18, { w: 60, h: 28, text: 'ВЫХОД ↓', color: '#FFE9B8' });
   },
 };

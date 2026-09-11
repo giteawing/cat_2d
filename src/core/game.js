@@ -514,6 +514,8 @@ export class Game {
     if (this.weapons.current === 'gravity') this.effects.drawGravityBeam(ctx, this.weapons, this.time);
     // cat
     drawCat(ctx, this.player, this.time, this.weapons.view());
+    // optical media haze (the cat is inside it)
+    for (const p of this.puzzles) if (p.drawOverlay) p.drawOverlay(ctx, this.time);
     // portal front rings again lightly to give depth when passing through
     for (const p of this.portals.pair) if (p.active) { ctx.globalAlpha = 0.35; drawPortal(ctx, p, this.time, this.portals.linked); ctx.globalAlpha = 1; }
     // interact prompts

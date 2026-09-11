@@ -71,7 +71,14 @@ w.expect(p.body.groundBody === platforms[0].body, 'on the lift');
 n = 0; while (platforms[0].t < 0.99 && n++ < 1500) d.step(1); w.where('lift top');
 d.key('KeyD'); d.key('Space'); d.step(12); d.key('Space', false); d.step(30); d.releaseAll(); d.step(30); w.where('shelf D');
 w.walkTo(98.5); d.step(20); w.expect(game.giftsCollected === 5, 'gift 4 (big)');
-w.walkTo(100); d.step(5); w.walk(1, 20, false); d.step(80); w.walkTo(110); d.step(10); w.walkTo(118); d.step(100);
+w.walkTo(100); d.step(5); w.walk(1, 20, false); d.step(80); w.walkTo(110); d.step(10); w.walkTo(118); d.step(20); w.expect(p.body.cx > 116 * T, 'through door D');
+// ---- E: refraction — the valve fills the chamber with dense gas, the tilted beam bends onto the floor receiver
+const LE = lasers[lasers.length - 1]; const segE = () => LE.segments.map((g) => `(${(g.x1 / T).toFixed(1)},${(g.y1 / T).toFixed(1)})`).join(' ');
+console.log('  E empty', segE()); w.expect(!w.channel('rE'), 'empty chamber: beam misses the receiver');
+w.walkTo(121.4); d.step(5); w.interact(); w.expect(w.channel('gasE'), 'valve E → gas');
+n = 0; while (!w.channel('rE') && n++ < 900) d.step(1); console.log('  E dense', segE());
+w.expect(w.channel('rE'), `refracted beam hits rE (${n} frames) → door E open`);
+w.walkTo(140); d.step(10); w.walk(1, 20, false); d.step(80); w.walkTo(149); d.step(100);
 w.expect(game.state === 'complete', 'exit reached');
 w.shot('level12');
 process.exit(w.done() ? 0 : 1);

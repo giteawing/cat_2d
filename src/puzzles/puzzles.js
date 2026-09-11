@@ -1,4 +1,4 @@
-// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver.
+// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium.
 // Components communicate through named "channels": an activator sets channel[name] = true/false,
 // and receivers read the channel each frame. Multiple activators can be AND-ed by a door.
 import { TILE, clamp, lerp } from '../core/util.js';
@@ -323,7 +323,9 @@ export class FieldGate {
  */
 export class Laser {
   constructor(x, y, dx, dy, opts = {}) {
-    this.x = x; this.y = y; this.dx = Math.sign(dx); this.dy = Math.sign(dy);
+    // direction may be any unit vector (axis-aligned emitters or tilted ones — see LevelKit.laser with an angle)
+    this.x = x; this.y = y;
+    const l = Math.hypot(dx, dy) || 1; this.dx = dx / l; this.dy = dy / l;
     this.requires = opts.requires || null; this.inverted = !!opts.inverted;
     this.on = false; this.segments = []; this.hitBodies = new Set();
     this.color = opts.color || '#FF4A4A';
@@ -336,7 +338,10 @@ export class Laser {
     const map = game.map, world = game.world, portals = game.portals;
     let ox = this.x, oy = this.y, dx = this.dx, dy = this.dy;
     const passShot = (cx, cy) => { const t = map.get(cx, cy); return map.blocksShot(t) && !map.isField(t); };
-    for (let bounce = 0; bounce < 12; bounce++) {
+    const media = game.puzzles.filter((q) => q instanceof Medium);
+    const indexAt = (x, y) => { for (const m of media) if (m.contains(x, y)) return m.n; return 1; };
+    for (let bounce = 0; bounce < 16; bounce++) {
+      const n1 = indexAt(ox, oy);
       // nearest tile hit (ignoring the tiles of a portal aperture on the beam's way — handled below) and nearest body hit
       const tileHit = map.raycast(ox, oy, dx, dy, 4000, null, passShot);
       const maxD = tileHit ? tileHit.dist : 4000;
@@ -367,18 +372,42 @@ export class Laser {
           if (!portalHit || t < portalHit.dist) portalHit = { dist: t, portal: p, hx, hy };
         }
       }
+      // boundary of an optical medium on the way? (refraction — Snell's law; total internal reflection when leaving a
+      // dense medium at a grazing angle)
+      let mediumHit = null;
+      { const limit = Math.min(bodyHit ? bodyHit.dist : maxD, portalHit ? portalHit.dist : maxD);
+        for (const m of media) {
+          const t = m.boundaryT(ox, oy, dx, dy);
+          if (t !== null && t > 0.5 && t < limit && (!mediumHit || t < mediumHit.dist)) mediumHit = { dist: t, medium: m };
+        } }
+      if (mediumHit) {
+        const hx = ox + dx * mediumHit.dist, hy = oy + dy * mediumHit.dist;
+        const m = mediumHit.medium;
+        const nrm = m.normalAt(hx, hy);                               // outward normal of the medium's boundary
+        const n2 = indexAt(hx + dx * 0.5, hy + dy * 0.5);
+        this.segments.push({ x0: ox, y0: oy, x1: hx, y1: hy, n: n1, refract: Math.abs(n1 - n2) > 0.02 });
+        // Snell: n1 sin i = n2 sin r, with the normal pointing against the incoming ray
+        let nx = nrm.x, ny = nrm.y; if (dx * nx + dy * ny > 0) { nx = -nx; ny = -ny; }
+        const cosI = -(dx * nx + dy * ny), eta = n1 / n2;
+        const k = 1 - eta * eta * (1 - cosI * cosI);
+        if (k < 0) { dx = dx + 2 * cosI * nx; dy = dy + 2 * cosI * ny; }                              // total internal reflection
+        else { const f = eta * cosI - Math.sqrt(k); dx = eta * dx + f * nx; dy = eta * dy + f * ny; }
+        const l = Math.hypot(dx, dy); dx /= l; dy /= l;
+        ox = hx + dx * 0.6; oy = hy + dy * 0.6; this._skip = null;
+        continue;
+      }
       if (portalHit && (!bodyHit || portalHit.dist <= bodyHit.dist)) {
         // the portal "focuses" the beam: it enters anywhere within the aperture and leaves from the other portal's centre
         // (forgiving for puzzles — no pixel-perfect portal placement needed)
         const a = portalHit.portal, b = portals.other(a), tr = portals.transform(a, b);
-        this.segments.push({ x0: ox, y0: oy, x1: a.x, y1: a.y }); this._skip = null;
-        const v = tr.vec(dx, dy); dx = Math.sign(Math.round(v.x)); dy = Math.sign(Math.round(v.y));
+        this.segments.push({ x0: ox, y0: oy, x1: a.x, y1: a.y, n: n1 }); this._skip = null;
+        const v = tr.vec(dx, dy); const vl = Math.hypot(v.x, v.y) || 1; dx = v.x / vl; dy = v.y / vl;
         ox = b.x + b.nx * 2; oy = b.y + b.ny * 2;
         continue;
       }
       if (bodyHit) {
         const b = bodyHit.body, hx = ox + dx * bodyHit.dist, hy = oy + dy * bodyHit.dist;
-        this.segments.push({ x0: ox, y0: oy, x1: hx, y1: hy });
+        this.segments.push({ x0: ox, y0: oy, x1: hx, y1: hy, n: n1 });
         b.laserLit = true; this.hitBodies.add(b);
         if (bodyHit.receiver) { bodyHit.receiver.hit = true; break; }
         if (b.kind === 'mirror') {
@@ -394,7 +423,7 @@ export class Laser {
         break;
       }
       const ex = tileHit ? tileHit.x : ox + dx * 4000, ey = tileHit ? tileHit.y : oy + dy * 4000;
-      this.segments.push({ x0: ox, y0: oy, x1: ex, y1: ey });
+      this.segments.push({ x0: ox, y0: oy, x1: ex, y1: ey, n: n1 });
       break;
     }
   }
@@ -410,12 +439,102 @@ export class Laser {
     const pulse = 0.85 + 0.15 * Math.sin(time * 30);
     ctx.save(); ctx.lineCap = 'round';
     for (const s of this.segments) {
-      ctx.strokeStyle = `rgba(255,70,70,${0.25 * pulse})`; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      // inside a dense medium the beam scatters: a wider, softer halo (light travels slower there — hence the bend)
+      const dense = (s.n || 1) > 1.02, halo = dense ? 12 : 7, ha = dense ? 0.32 : 0.25;
+      ctx.strokeStyle = `rgba(255,70,70,${ha * pulse})`; ctx.lineWidth = halo; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
       ctx.strokeStyle = `rgba(255,120,120,${0.9 * pulse})`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
       ctx.strokeStyle = 'rgba(255,240,240,0.9)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
       // impact glow at the end
       ctx.fillStyle = `rgba(255,140,140,${0.7 * pulse})`; ctx.beginPath(); ctx.arc(s.x1, s.y1, 4 + Math.sin(time * 40), 0, Math.PI * 2); ctx.fill();
+      if (s.refract) {
+        // teaching aid: a faint dashed "ghost" of where the beam WOULD have gone without the bend
+        const l = Math.hypot(s.x1 - s.x0, s.y1 - s.y0) || 1, ux = (s.x1 - s.x0) / l, uy = (s.y1 - s.y0) / l;
+        ctx.save(); ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(255,200,200,0.35)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x1 + ux * 140, s.y1 + uy * 140); ctx.stroke(); ctx.restore();
+      }
     }
+    ctx.restore();
+  }
+}
+
+/**
+ * Medium: a rectangular zone with a refractive index `n` (an "optically dense" room). A laser beam crossing its boundary
+ * bends according to Snell's law (n1·sin i = n2·sin r); leaving a dense medium at a grazing angle reflects it back
+ * (total internal reflection). Physics bodies are unaffected — this is purely optical.
+ * `requires`: when set, the medium is dense only while the channel is on (a valve/pump); the index fades smoothly, so the
+ * beam visibly sweeps as the room fills. Draws a tinted haze with drifting particles and a readout of the current n.
+ */
+export class Medium {
+  constructor(x, y, w, h, opts = {}) {
+    this.x = x; this.y = y; this.w = w; this.h = h;
+    this.nDense = opts.n || 1.5; this.requires = opts.requires || null; this.inverted = !!opts.inverted;
+    this.color = opts.color || '#63C7D9'; this.label = opts.label ?? 'ПЛОТНОСТЬ';
+    this.on = !this.requires; this.t = this.on ? 1 : 0; this.n = this.on ? this.nDense : 1;
+    this.seed = ((x * 7 + y * 13) | 0) % 97;
+  }
+  get right() { return this.x + this.w; } get bottom() { return this.y + this.h; }
+  contains(px, py) { return this.t > 0.001 && px > this.x && px < this.right && py > this.y && py < this.bottom; }
+  /** Distance along the ray to the next boundary crossing of this rect (entry when outside, exit when inside). */
+  boundaryT(ox, oy, dx, dy) {
+    if (this.t <= 0.001) return null;
+    let tmin = -Infinity, tmax = Infinity;
+    if (Math.abs(dx) < 1e-9) { if (ox <= this.x || ox >= this.right) return null; } else { let a = (this.x - ox) / dx, b = (this.right - ox) / dx; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
+    if (Math.abs(dy) < 1e-9) { if (oy <= this.y || oy >= this.bottom) return null; } else { let a = (this.y - oy) / dy, b = (this.bottom - oy) / dy; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
+    if (tmax < 0 || tmin > tmax) return null;
+    const inside = ox > this.x && ox < this.right && oy > this.y && oy < this.bottom;
+    return inside ? tmax : (tmin > 0 ? tmin : null);
+  }
+  /** Outward normal of the boundary face closest to (px,py). */
+  normalAt(px, py) {
+    const d = [[px - this.x, -1, 0], [this.right - px, 1, 0], [py - this.y, 0, -1], [this.bottom - py, 0, 1]];
+    d.sort((a, b) => a[0] - b[0]);
+    return { x: d[0][1], y: d[0][2] };
+  }
+  update(dt, game) {
+    let want = !this.requires || game.channels.test(this.requires); if (this.inverted) want = !want;
+    if (want !== this.on) { this.on = want; game.sfx(want ? 'fieldOn' : 'fieldOff'); }
+    this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 1.6));
+    if (Math.abs(this.t - (this.on ? 1 : 0)) < 0.004) this.t = this.on ? 1 : 0;
+    this.n = 1 + (this.nDense - 1) * this.t;
+  }
+  /** Behind bodies: boundary frame + readout. */
+  draw(ctx, time) {
+    const a = 0.25 + 0.55 * this.t;
+    ctx.save();
+    ctx.strokeStyle = this.color; ctx.globalAlpha = a; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.lineDashOffset = -time * 20;
+    ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2);
+    ctx.setLineDash([]);
+    // readout plaque in the top-left corner
+    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(20,26,34,0.85)'; ctx.fillRect(this.x + 6, this.y + 6, 92, 30);
+    ctx.strokeStyle = this.color; ctx.lineWidth = 1; ctx.strokeRect(this.x + 6.5, this.y + 6.5, 92, 30);
+    ctx.fillStyle = this.color; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(this.label, this.x + 11, this.y + 17);
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 12px monospace'; ctx.fillText(`n = ${this.n.toFixed(2)}`, this.x + 11, this.y + 31);
+    ctx.restore();
+  }
+  /** Over everything (the cat walks INSIDE the haze). */
+  drawOverlay(ctx, time) {
+    if (this.t <= 0.001) return;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
+    const grad = ctx.createLinearGradient(0, this.y, 0, this.bottom); grad.addColorStop(0, this.color); grad.addColorStop(1, '#2A6F86');
+    ctx.fillStyle = grad; ctx.globalAlpha = 0.26 * this.t; ctx.fillRect(this.x, this.y, this.w, this.h);
+    // the "surface" of the gas: a wavy bright line along the top edge
+    ctx.globalAlpha = 0.8 * this.t; ctx.strokeStyle = '#E6FBFF'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = 0; x <= this.w; x += 6) { const y = this.y + 1.5 + Math.sin(x * 0.11 + time * 2.2) * 1.6; if (x === 0) ctx.moveTo(this.x + x, y); else ctx.lineTo(this.x + x, y); }
+    ctx.stroke();
+    // slow drifting motes
+    ctx.globalAlpha = 0.5 * this.t; ctx.fillStyle = '#E6FBFF';
+    const count = Math.min(60, Math.floor(this.w * this.h / 2600));
+    for (let i = 0; i < count; i++) {
+      const s = (i * 37 + this.seed * 11) % 101 / 101, s2 = (i * 53 + this.seed * 7) % 97 / 97;
+      const px = this.x + ((s * this.w + Math.sin(time * 0.5 + i) * 10 + time * 6 * (0.3 + s2)) % this.w + this.w) % this.w;
+      const py = this.y + ((s2 * this.h + Math.cos(time * 0.4 + i * 1.7) * 6) % this.h + this.h) % this.h;
+      ctx.fillRect(px, py, 2, 2);
+    }
+    // shimmering boundary curtain
+    ctx.globalAlpha = 0.35 * this.t; ctx.strokeStyle = '#C8F4FF'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(this.x + 1.5, this.y); ctx.lineTo(this.x + 1.5, this.bottom); ctx.moveTo(this.right - 1.5, this.y); ctx.lineTo(this.right - 1.5, this.bottom); ctx.stroke();
     ctx.restore();
   }
 }

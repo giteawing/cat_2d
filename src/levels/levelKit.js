@@ -1,7 +1,7 @@
 // Helpers used by level definitions to build content in tile units.
 import { TILE } from '../core/util.js';
 import { makeProp, scatter, PROPS } from '../physics/props.js';
-import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver } from '../puzzles/puzzles.js';
+import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium } from '../puzzles/puzzles.js';
 import { Gift } from '../gifts/gift.js';
 
 export const px = (t) => t * TILE;
@@ -55,7 +55,9 @@ export class LevelKit {
   fieldGate(tx, ty, w, h, requires, opts = {}) { const f = new FieldGate(tx, ty, w, h, requires, opts); this.game.puzzles.push(f); return f; }
   /** Laser emitter mounted on the wall behind the EMPTY tile (tx,ty), firing `dir` ('right'|'left'|'up'|'down'). */
   laser(tx, ty, dir, opts = {}) {
-    const v = DIRS[dir]; if (!v) throw new Error('laser dir ' + dir);
+    // dir: 'right'|'left'|'up'|'down' or an angle in degrees (clockwise from +x, i.e. 40 = down-right by 40°)
+    const v = typeof dir === 'number' ? [Math.cos(dir * Math.PI / 180), Math.sin(dir * Math.PI / 180)] : DIRS[dir];
+    if (!v) throw new Error('laser dir ' + dir);
     const l = new Laser(px(tx) + TILE / 2 - v[0] * (TILE / 2 - 1), px(ty) + TILE / 2 - v[1] * (TILE / 2 - 1), v[0], v[1], opts);
     this.game.puzzles.push(l); return l;
   }
@@ -65,6 +67,8 @@ export class LevelKit {
     const r = new LaserReceiver(px(tx) + TILE / 2 - v[0] * 6, px(ty) + TILE / 2 - v[1] * 6, channel, { nx: v[0], ny: v[1], ...opts });
     this.game.puzzles.push(r); return r;
   }
+  /** Optical medium (refraction zone) covering tiles (tx,ty)-(tx+w-1,ty+h-1); opts: n (index, 1.5), requires (channel → dense only while on). */
+  medium(tx, ty, w, h, opts = {}) { const m = new Medium(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(m); return m; }
   fan(tx, ty, w, h, opts = {}) { const f = new Fan(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(f); return f; }
 
   gift(tx, ty, type = 'normal', id = null) {

@@ -71,7 +71,9 @@ single beam can light several receivers one after another. Crates and other prop
    flip-in-flight finale on a horizontal lift.
 4. **Купол** — the World 2 finale: a mirror bobbing in a fan column, a beam lock behind a permanent field (crate through a
    ceiling portal), one fan-lifted mirror for two receivers at different heights, and a lift mirror → floor mirror →
-   receiver chain with a third-mirror secret.
+   receiver chain with a third-mirror secret. Finale: **refraction** — a tilted beam falls into a chamber; a valve fills it
+   with an optically dense gas (`Medium`, n = 1.5) and the beam bends at the surface by Snell's law onto a floor receiver
+   (a dashed ghost shows the un-bent path; the haze and an `n = …` readout show the medium).
 
 Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
 
@@ -117,7 +119,7 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 146 checks
+cd .. && npm test           # 151 checks
 npm run walk                # plays all 12 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
