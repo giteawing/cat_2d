@@ -6,7 +6,7 @@ import { World } from '../src/physics/world.js';
 import { PortalManager } from '../src/portals/portalManager.js';
 import { makeProp } from '../src/physics/props.js';
 import { Player } from '../src/characters/cat/player.js';
-import { Laser, LaserReceiver, Channels, Medium } from '../src/puzzles/puzzles.js';
+import { Laser, LaserReceiver, Channels, Medium, Water } from '../src/puzzles/puzzles.js';
 
 let fails = 0, passes = 0;
 function check(name, cond, info = '') { if (cond) { passes++; console.log('  ✓', name); } else { fails++; console.log('  ✗', name, info); } }
@@ -359,6 +359,44 @@ const R = [
   check('medium off again: straight beam restored', L.segments.length === 1 && near(end().x1, landEmpty, 0.5), `${L.segments.length}`);
 }
 
+// ------------------------------------------------------------ water: buoyancy, swimming, filling tanks (World 3)
+{
+  console.log('Water: buoyancy by density, swimming cat, filling tank lifts a raft');
+  const P = ['####################', ...Array.from({ length: 10 }, () => '#..................#'), '####################'];
+  const pool = (opts = {}) => { const { map, world, portals } = room(P); const ch = new Channels(); const game = { map, world, portals, channels: ch, puzzles: [], sfx() {}, player: null };
+    const w = new Water(1 * TILE, 5 * TILE, 18 * TILE, 6 * TILE, opts); world.waters.push(w); game.puzzles.push(w);
+    const step = (n, p = null, inp = {}) => { for (let i = 0; i < n; i++) { if (p) p.setInput({ left: false, right: false, up: false, down: false, jump: false, run: false, ...inp }); w.update(1 / 60, game); world.step(1 / 60); if (p) p.update(1 / 60, world); } };
+    return { map, world, game, w, ch, step }; };
+  { const { world, w, step } = pool();
+    const crate = world.add(makeProp('crate', 3 * TILE, 2 * TILE)), cube = world.add(makeProp('cube', 6 * TILE, 2 * TILE)), duck = world.add(makeProp('duck', 9 * TILE, 2 * TILE)), cup = world.add(makeProp('cup', 12 * TILE, 2 * TILE));
+    step(600);
+    check('wooden crate floats (~60% under)', !crate.onGround && near(crate.submerged, 0.6, 0.08) && Math.abs(crate.vy) < 5, `sub=${crate.submerged} vy=${crate.vy}`);
+    check('metal cube sinks to the bottom', cube.onGround && near(cube.bottom, 11 * TILE, 0.5), `bottom=${cube.bottom}`);
+    check('rubber duck rides high, cup sinks', duck.submerged < 0.35 && !duck.onGround && cup.onGround, `duck=${duck.submerged} cup=${cup.onGround}`);
+    check('floating bodies sit at the surface', near(crate.bottom - crate.h * crate.submerged, w.top, 2), `${crate.bottom - crate.h * crate.submerged} vs ${w.top}`); }
+  { const { world, game, step } = pool();
+    const p = new Player(3 * TILE, 2 * TILE); world.add(p.body); game.player = p;
+    step(240, p);
+    check('cat floats with its head above water and swims', p.swimming && p.body.submerged > 0.4 && p.body.submerged < 0.75 && p.anim === 'float', `sub=${p.body.submerged} anim=${p.anim}`);
+    const x0 = p.body.cx; step(120, p, { right: true });
+    check('paddling right moves the cat (slower than walking)', p.body.cx > x0 + 3 * TILE && Math.abs(p.body.vx) < 190 && p.anim === 'swim', `dx=${(p.body.cx - x0) / TILE} vx=${p.body.vx}`);
+    step(120, p, { down: true }); check('S dives to the bottom', p.body.onGround && near(p.body.bottom, 11 * TILE, 1), `bottom=${p.body.bottom}`);
+    step(150, p, { up: true }); check('W surfaces again', p.body.submerged < 0.75 && p.body.y < 5 * TILE, `sub=${p.body.submerged} y=${p.body.y}`);
+    const yFloat = p.body.y; step(1, p, { jump: true, jumpPressed: true }); let minY = 99, left = false; for (let i = 0; i < 45; i++) { step(1, p, { jump: true }); if (p.body.y < minY) { minY = p.body.y; left = !p.swimming; } }
+    check('Space at the surface hops the cat ~2 tiles up and out of the water', near((yFloat - minY) / TILE, 2.2, 0.5) && left, `lift=${(yFloat - minY) / TILE} tiles, out=${left}`); }
+  { const { world, w, ch, step } = pool({ level: 1, levelEmpty: 0.2, requires: 'fill', speed: 0.5 });
+    step(5); check('tank with a channel starts at its empty level', near(w.level, 0.2, 0.01), `level=${w.level}`);
+    const raft = world.add(makeProp('bigCrate', 8 * TILE, 8 * TILE)); const mirror = world.add(makeProp('mirror', 8 * TILE + 8, 8 * TILE - 48));
+    step(120); const y0 = raft.y;
+    ch.set('fill', true); step(200);
+    check('valve on → tank fills to full', near(w.level, 1, 0.01), `level=${w.level}`);
+    check('the raft (and the mirror on it) rise with the water', raft.y < y0 - 4 * TILE && near(mirror.bottom, raft.y, 1.5), `raft dy=${(y0 - raft.y) / TILE} mirror gap=${mirror.bottom - raft.y}`);
+    ch.set('fill', false); step(240); check('valve off → drains back; raft comes down', near(w.level, 0.2, 0.01) && raft.y > y0 - TILE, `level=${w.level} raft.y=${raft.y} y0=${y0}`); }
+  { const { game, step } = pool();  // water is an optical medium (n = 1.33): a tilted beam bends at the surface
+    const ang = 50 * Math.PI / 180; const L = new Laser(2 * TILE, 2 * TILE, Math.cos(ang), Math.sin(ang)); game.puzzles.push(L); game.world.step(1 / 60); for (const q of game.puzzles) q.update(1 / 60, game);
+    check('a tilted laser refracts at the water surface (two segments)', L.segments.length === 2 && near(L.segments[0].y1, 5 * TILE, 1), `${L.segments.length}`); }
+}
+
 // ------------------------------------------------------------ world summary screen after the last level of a world
 {
   console.log('World summary screen');
@@ -370,8 +408,9 @@ const R = [
   let ok = true; try { d.step(90); } catch (e) { ok = false; console.log(e); } check('summary renders without errors', ok);
   d.tap('Enter'); d.step(2); check('Enter → level select', game.state === 'select', game.state);
   d.startLevel(LEVELS.length - 1); d.step(5); game.state = 'complete'; game.completeTimer = 2; d.tap('Enter'); d.step(1);
-  check('last level of the campaign → world 2 summary', game.state === 'worldDone' && game.worldDoneWorld === 2, game.state + ' ' + game.worldDoneWorld);
-  ok = true; try { d.step(30); } catch (e) { ok = false; console.log(e); } check('world 2 summary renders', ok);
+  const lastWorld = LEVELS[LEVELS.length - 1].world;
+  check(`last level of the campaign → world ${lastWorld} summary`, game.state === 'worldDone' && game.worldDoneWorld === lastWorld, game.state + ' ' + game.worldDoneWorld);
+  ok = true; try { d.step(30); } catch (e) { ok = false; console.log(e); } check(`world ${lastWorld} summary renders`, ok);
 }
 
 console.log(`\n${passes} passed, ${fails} failed`);

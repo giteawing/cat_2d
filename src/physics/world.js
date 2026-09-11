@@ -25,6 +25,8 @@ export class World {
     this.frameIgnore = new Map(); // body.id -> Set of tile indices (portal apertures)
     this.onField = null;          // (body, 'pass'|'bounce', x, y, nx, ny) callback: electric-field contact
     this.rng = Math.random;       // tunneling dice (replaceable for deterministic tests)
+    this.waters = [];             // Water zones (puzzles) — buoyancy & drag; assigned by game after level setup
+    this.onSplash = null;         // (body, speed, x, surfaceY) callback
   }
 
   /** Recompute which tiles a body may ignore this substep: portal apertures + a potential barrier it is tunneling through. */
@@ -197,7 +199,21 @@ export class World {
       if (b.fieldCooldown > 0) b.fieldCooldown -= dt;
       if (b.knockback > 0) b.knockback -= dt;
       if (b.ignoreOneWay > 0) b.ignoreOneWay -= dt;
+      // water: how deep is the body in?
+      const wasSub = b.submerged; b.submerged = 0; b.water = null;
+      for (const w of this.waters) { const f = w.submersion(b); if (f > 0) { b.submerged = f; b.water = w; break; } }
+      if (wasSub === 0 && b.submerged > 0 && this.onSplash && (b.vy > 120 || Math.abs(b.vx) > 200)) this.onSplash(b, Math.hypot(b.vx, b.vy), b.cx, b.water.top);
       if (!b.held && b.gravityScale !== 0) b.vy += this.gravity * b.gravityScale * dt;
+      if (b.submerged > 0 && !b.held) {
+        // Archimedes: upward acceleration g·(submerged fraction)/density; plus viscous drag (a swimmer's thrust is
+        // applied by the controller afterwards, so the drag here is what makes water feel thick)
+        const f = b.submerged;
+        b.vy -= this.gravity * f / b.density * dt;
+        const kx = b.type === BodyType.CHARACTER ? 2.5 : 3.5, ky = b.type === BodyType.CHARACTER ? 3.5 : 4.5;
+        b.vx *= Math.exp(-kx * f * dt);
+        if (!(b.type === BodyType.CHARACTER && b.vy < -200)) b.vy *= Math.exp(-ky * f * dt);   // a cat leaping out is not dragged back
+        b.wake();
+      }
       // drag
       const drag = 1 / (1 + b.airDrag * dt * 60);
       b.vx *= drag; b.vy *= drag;

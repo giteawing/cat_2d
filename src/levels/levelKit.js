@@ -1,7 +1,7 @@
 // Helpers used by level definitions to build content in tile units.
 import { TILE } from '../core/util.js';
 import { makeProp, scatter, PROPS } from '../physics/props.js';
-import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium } from '../puzzles/puzzles.js';
+import { PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium, Water } from '../puzzles/puzzles.js';
 import { Gift } from '../gifts/gift.js';
 
 export const px = (t) => t * TILE;
@@ -69,6 +69,8 @@ export class LevelKit {
   }
   /** Optical medium (refraction zone) covering tiles (tx,ty)-(tx+w-1,ty+h-1); opts: n (index, 1.5), requires (channel → dense only while on). */
   medium(tx, ty, w, h, opts = {}) { const m = new Medium(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(m); return m; }
+  /** Water tank covering tiles (tx,ty)-(tx+w-1,ty+h-1); opts: level (0..1 full), requires (fills while on), inverted (drains while on), speed. */
+  water(tx, ty, w, h, opts = {}) { const wt = new Water(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(wt); this.game.world.waters.push(wt); return wt; }
   fan(tx, ty, w, h, opts = {}) { const f = new Fan(px(tx), px(ty), px(w), px(h), opts); this.game.puzzles.push(f); return f; }
 
   gift(tx, ty, type = 'normal', id = null) {

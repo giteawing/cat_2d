@@ -119,6 +119,9 @@ export class AudioSystem {
       case 'break': this.noise({ dur: 0.3, vol: 0.25, freq: 5000, type: 'highpass' }); for (let i = 0; i < 4; i++) this.tone({ freq: 1500 + Math.random() * 1500, type: 'sine', dur: 0.12, vol: 0.08, delay: i * 0.03 }); break;
       case 'plateOn': this.tone({ freq: 320, type: 'square', dur: 0.08, vol: 0.1 }); this.tone({ freq: 480, type: 'square', dur: 0.12, vol: 0.1, delay: 0.07 }); break;
       case 'plateOff': this.tone({ freq: 480, type: 'square', dur: 0.08, vol: 0.08 }); this.tone({ freq: 320, type: 'square', dur: 0.12, vol: 0.08, delay: 0.07 }); break;
+      case 'splash': { const v = Math.min(0.3, 0.1 + (arg?.speed || 0) / 3000); this.noise({ dur: 0.35, vol: v, freq: 1400, type: 'lowpass', slide: -900 }); this.tone({ freq: 520, type: 'sine', dur: 0.22, vol: v * 0.5, slide: -300 }); this.noise({ dur: 0.25, vol: v * 0.5, freq: 3000, type: 'bandpass', q: 2, delay: 0.12 }); break; }
+      case 'paddle': if (this.gate('paddle', 200)) this.noise({ dur: 0.14, vol: 0.09, freq: 900, type: 'bandpass', q: 1.2, slide: -400 }); break;
+      case 'valve': this.noise({ dur: 0.25, vol: 0.12, freq: 700, type: 'bandpass', q: 1.5 }); this.tone({ freq: 180, type: 'square', dur: 0.12, vol: 0.06 }); this.tone({ freq: 240, type: 'square', dur: 0.12, vol: 0.06, delay: 0.1 }); break;
       case 'button': this.tone({ freq: 700, type: 'square', dur: 0.07, vol: 0.1 }); this.noise({ dur: 0.05, vol: 0.08, freq: 1500 }); break;
       case 'lever': this.noise({ dur: 0.1, vol: 0.12, freq: 900 }); this.tone({ freq: 260, type: 'square', dur: 0.1, vol: 0.08, delay: 0.08 }); break;
       case 'doorOpen': this.noise({ dur: 0.5, vol: 0.12, freq: 400, slide: 500 }); this.tone({ freq: 90, type: 'sawtooth', dur: 0.5, vol: 0.07, slide: 40 }); break;
@@ -137,7 +140,7 @@ export class AudioSystem {
     this.stopMusic();
     this.musicTheme = theme;
     this.step = 0;
-    const bpm = theme === 'lab' ? 104 : theme === 'observatory' ? 96 : 112;
+    const bpm = theme === 'lab' ? 104 : theme === 'observatory' ? 96 : theme === 'aquarium' ? 84 : 112;
     const stepDur = 60 / bpm / 2; // 8th notes
     this.nextTime = this.ctx.currentTime + 0.1;
     const tick = () => {
@@ -198,6 +201,13 @@ const MUSIC = {
       N(72), 0, 0, N(76), 0, 0, N(77), 0, 0, 0, N(76), 0, N(72), 0, 0, 0,
       N(74), 0, 0, N(78), 0, 0, N(79), 0, 0, 0, N(78), 0, N(74), 0, 0, 0,
       N(71), 0, 0, N(74), 0, 0, N(76), 0, 0, 0, N(80), 0, N(83), 0, 0, 0],
+  },
+  aquarium: {   // dreamy, slow, minor-ish (Dm – Bb – F – C)
+    chords: [[N(50), N(53), N(57)], [N(46), N(50), N(53)], [N(53), N(57), N(60)], [N(48), N(52), N(55)]],
+    melody: [N(69), 0, 0, 0, N(72), 0, 0, 0, N(74), 0, 0, N(72), 0, 0, N(69), 0,
+      N(65), 0, 0, 0, N(69), 0, 0, 0, N(70), 0, 0, N(69), 0, 0, N(65), 0,
+      N(67), 0, 0, 0, N(70), 0, 0, 0, N(72), 0, 0, N(70), 0, 0, N(67), 0,
+      N(64), 0, 0, 0, N(67), 0, 0, 0, N(69), 0, 0, 0, 0, 0, 0, 0],
   },
   garden: {
     chords: [[N(62), N(66), N(69)], [N(59), N(62), N(66)], [N(67), N(71), N(74)], [N(69), N(73), N(76)]],

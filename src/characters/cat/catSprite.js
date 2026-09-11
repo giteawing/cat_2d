@@ -145,6 +145,24 @@ export function computePose(p, time) {
     case 'confused': pose.headTilt = 0.28; pose.eyeOpen = 0.9; pose.mouth = 'small'; pose.question = 1; pose.pupilX = 2; pose.tailWag = wave(time, 1.5) * 0.4; break;
     case 'hurt': pose.eyeOpen = 0.2; pose.mouth = 'grit'; pose.headTilt = -0.2; pose.bodyTilt = -0.2; pose.earFlick = -0.4; break;
     case 'portalExit': pose.eyeOpen = 1.2; pose.mouth = 'o'; pose.earFlick = 0.3; pose.sparkle = 1; break;
+    case 'swim': {   // doggy-paddle: body tilted forward, alternating front paws, kicking legs, ears back, chin up
+      const f = 2.6, s = wave(t, f), k = p.swimStroke || 0;
+      pose.bodyTilt = 0.55 + s * 0.04; pose.headTilt = -0.35; pose.headY = -3; pose.headX = 2;
+      pose.armFront = -1.2 + s * 0.9 - k * 0.6; pose.armBack = -1.2 - s * 0.9 - k * 0.6;
+      pose.legFront = s * 0.5; pose.legBack = -s * 0.5; pose.legLift = 0.8;
+      pose.tailAngle = 0.2; pose.tailCurl = 0.5; pose.tailWag = s * 0.25;
+      pose.earFlick = -0.35; pose.eyeOpen = 0.85; pose.mouth = 'grit'; pose.bodyY = Math.abs(s) * 1.5;
+      break;
+    }
+    case 'float': {  // treading water: gentle bob, relaxed paws paddling slowly, content face
+      const s = wave(time, 0.9);
+      pose.bodyTilt = 0.3 + s * 0.03; pose.headTilt = -0.22; pose.headY = -2 + s * 0.8; pose.bodyY = s * 1.5;
+      pose.armFront = -1.0 + s * 0.3; pose.armBack = -1.0 - s * 0.3;
+      pose.legFront = s * 0.2; pose.legBack = -s * 0.2; pose.legLift = 0.6;
+      pose.tailAngle = 0.1; pose.tailCurl = 0.6; pose.tailWag = wave(time, 0.6) * 0.2;
+      pose.earFlick = -0.2; pose.eyeOpen = 0.9; pose.mouth = 'small'; pose.pupilX = p.aimX * 1.5; pose.pupilY = p.aimY * 1.2;
+      break;
+    }
     case 'portalEnter': pose.eyeOpen = 1.1; pose.mouth = 'open'; break;
   }
   // ---- weapon reactions layered on top (Shoot GG / Shoot PG / Hold object / Pull) ----

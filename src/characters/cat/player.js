@@ -24,12 +24,13 @@ const APEX_GRAVITY = 0.6;       // lighter gravity near the apex for a floaty-bu
 export const Anim = {
   IDLE: 'idle', WALK: 'walk', RUN: 'run', JUMP_START: 'jumpStart', JUMP: 'jump', FALL: 'fall', LAND: 'land',
   CROUCH: 'crouch', CLIMB: 'climb', PUSH: 'push', HURT: 'hurt', HAPPY: 'happy', SURPRISE: 'surprise', CONFUSED: 'confused',
+  SWIM: 'swim', FLOAT: 'float',
   COLLECT: 'collect', PORTAL_ENTER: 'portalEnter', PORTAL_EXIT: 'portalExit',
 };
 
 export class Player {
   constructor(x, y) {
-    this.body = new Body({ type: BodyType.CHARACTER, x, y: y, w: CAT_W, h: CAT_H, mass: 4, friction: 0, bounce: 0, airDrag: 0, grabbable: false, portalable: true, kind: 'cat', maxSpeed: 1600 });
+    this.body = new Body({ type: BodyType.CHARACTER, x, y: y, w: CAT_W, h: CAT_H, mass: 4, friction: 0, bounce: 0, airDrag: 0, grabbable: false, portalable: true, kind: 'cat', maxSpeed: 1600, density: 0.55 });   // a cat floats with its head and shoulders above the water
     this.body.controller = this;
     this.body.tag = 'player';
     this.facing = 1;
@@ -66,6 +67,9 @@ export class Player {
     this.squash = 1;                  // visual squash/stretch
     this.stretch = 1;
     this.portalFlash = 0;
+    this.swimming = false;           // in water (body.submerged > 0.35)
+    this.swimStroke = 0;             // 0..1 stroke pulse for animation
+    this.wet = 0;                    // seconds of dripping after leaving water
     this.input = { left: false, right: false, up: false, down: false, jump: false, jumpPressed: false, run: false };
     this.events = null;              // set by game: (name, data) => void
   }
@@ -114,6 +118,36 @@ export class Player {
     b.climbing = this.climbing;
     // pressing down while standing on a floor portal drops the cat into it
     b.dropThrough = inp.down && this.onGround;
+
+    // ---- swimming ----
+    const sub = b.submerged;
+    // hysteresis: start swimming when chest-deep, stop only once nearly out (so bobbing at the surface doesn't flicker)
+    if ((this.swimming ? sub > 0.15 : sub > 0.4) && !this.climbing && !this.jumping) {
+      this.swimming = true;
+      if (this.crouching) this.setCrouch(false, world);
+      b.gravityScale = 1;
+      const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+      this.moveInput = dir; this.running = false;
+      // paddling: modest horizontal speed, slower when fully under (thick water)
+      const target = dir * (inp.run ? 170 : 130) * (0.7 + 0.3 * (1 - sub));
+      b.vx = approach(b.vx, target, 900 * dt);
+      if (dir !== 0 && !(this.weapon && this.weapon.isAiming())) this.facing = dir;
+      // dive / surface: S sinks, W (or holding jump) paddles up; at the surface a jump press hops out of the water
+      const atSurface = sub < 0.72;
+      if (inp.down) b.vy = approach(b.vy, 260, 5000 * dt);                       // dive (beats the buoyancy)
+      else if ((inp.up || inp.jump) && !atSurface) b.vy = approach(b.vy, -240, 3000 * dt);   // at the surface buoyancy alone keeps the head up
+      if (inp.jumpPressed) {
+        inp.jumpPressed = false;
+        if (atSurface) { b.vy = -JUMP_SPEED * 0.72; this.jumping = true; this.swimming = false; this.stretch = 1.15; this.squash = 0.9; this.emit('jump'); this.emit('splashOut'); }
+        else b.vy = Math.min(b.vy, -260);   // a stroke upwards
+        this.swimStroke = 1;
+      }
+      this.jumpBuffer = 0; this.coyote = 0;
+      if (b.vy > MAX_FALL * 0.5) b.vy = MAX_FALL * 0.5;
+      return;
+    }
+    if (this.swimming) { this.swimming = false; this.wet = 2.5; }
+    if (sub > 0.05 && b.vy >= -50) this.coyote = COYOTE;   // wading / just surfaced: a jump is always available
 
     // crouch (only on ground, not on ladders)
     const wantCrouch = inp.down && this.onGround && !this.climbing;
@@ -217,6 +251,8 @@ export class Player {
     if (this.emoteTimer > 0) { this.emoteTimer -= dt; if (this.emoteTimer <= 0) this.emote = null; }
     if (this.portalFlash > 0) this.portalFlash -= dt;
     if (this.fieldFlash > 0) this.fieldFlash -= dt;
+    if (this.swimStroke > 0) this.swimStroke = Math.max(0, this.swimStroke - dt * 2.5);
+    if (this.wet > 0) this.wet -= dt;
     this.tunnelFx += ((this.tunneling ? 1 : 0) - this.tunnelFx) * Math.min(1, dt * 8);
     if (b.pushing && world.time - b.pushing < 0.1 && this.moveInput !== 0) this.pushingTimer = 0.15; else this.pushingTimer -= dt;
     this.squash += (1 - this.squash) * Math.min(1, dt * 12);
@@ -231,9 +267,11 @@ export class Player {
     const aiming = this.weapon && this.weapon.isAiming();
     if (aiming && this.moveInput === 0 && Math.abs(this.aimX) > 0.25) this.facing = this.aimX >= 0 ? 1 : -1;
 
-    // footsteps
+    // footsteps (paddle sounds in water)
     const speed = Math.abs(b.vx - (b.groundBody ? b.groundBody.vx : 0));
-    if (this.onGround && speed > 30 && !this.crouching) {
+    if (this.swimming) {
+      if (speed > 30 || Math.abs(b.vy) > 60) { this.stepTimer -= dt; if (this.stepTimer <= 0) { this.stepTimer = 0.45; this.emit('paddle'); this.swimStroke = Math.max(this.swimStroke, 0.8); } }
+    } else if (this.onGround && speed > 30 && !this.crouching) {
       this.stepTimer -= dt * (speed / 150);
       if (this.stepTimer <= 0) { this.stepTimer = 0.32; this.emit('step', { run: this.running }); }
     } else this.stepTimer = 0.1;
@@ -241,6 +279,7 @@ export class Player {
     // choose animation
     let anim;
     if (this.emote) anim = this.emote;
+    else if (this.swimming) anim = (speed > 30 || Math.abs(b.vy) > 60 || this.moveInput !== 0) ? Anim.SWIM : Anim.FLOAT;
     else if (this.climbing) anim = Anim.CLIMB;
     else if (!this.onGround) anim = this.jumpStartTimer > 0 ? Anim.JUMP_START : b.vy < -60 ? Anim.JUMP : b.vy > 60 ? Anim.FALL : Anim.JUMP;
     else if (this.landTimer > 0 && speed < 40) anim = Anim.LAND;

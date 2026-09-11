@@ -56,6 +56,9 @@ export class Body {
     this.fieldPass = null;        // Set of field tile indices the body is currently passing through
     this.fieldCooldown = 0;       // seconds until the next tunneling attempt
     this.knockback = 0;           // seconds of "flung back by a field" (controller ignores input)
+    this.density = opts.density ?? 1;   // relative to water: < 1 floats, > 1 sinks
+    this.submerged = 0;           // 0..1 fraction of the body under water this step
+    this.water = null;            // the Water zone the body is in (or null)
   }
 
   get cx() { return this.x + this.w / 2; }

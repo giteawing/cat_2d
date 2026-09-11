@@ -1,4 +1,4 @@
-// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium.
+// Reusable puzzle components: PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Medium, Water.
 // Components communicate through named "channels": an activator sets channel[name] = true/false,
 // and receivers read the channel each frame. Multiple activators can be AND-ed by a door.
 import { TILE, clamp, lerp } from '../core/util.js';
@@ -387,7 +387,7 @@ export class Laser {
       { const limit = Math.min(bodyHit ? bodyHit.dist : maxD, portalHit ? portalHit.dist : maxD);
         for (const m of media) {
           const t = m.boundaryT(ox, oy, dx, dy);
-          if (t !== null && t > 0.5 && t < limit && (!mediumHit || t < mediumHit.dist)) mediumHit = { dist: t, medium: m };
+          if (t !== null && t > 0.5 && t < limit - 1 && (!mediumHit || t < mediumHit.dist)) mediumHit = { dist: t, medium: m };   // (-1: a boundary flush with a wall is just the wall)
         } }
       if (mediumHit) {
         const hx = ox + dx * mediumHit.dist, hy = oy + dy * mediumHit.dist;
@@ -482,20 +482,21 @@ export class Medium {
     this.seed = ((x * 7 + y * 13) | 0) % 97;
   }
   get right() { return this.x + this.w; } get bottom() { return this.y + this.h; }
-  contains(px, py) { return this.t > 0.001 && px > this.x && px < this.right && py > this.y && py < this.bottom; }
+  get top() { return this.y; }             // Water overrides this with its moving surface
+  contains(px, py) { return this.t > 0.001 && px > this.x && px < this.right && py > this.top && py < this.bottom; }
   /** Distance along the ray to the next boundary crossing of this rect (entry when outside, exit when inside). */
   boundaryT(ox, oy, dx, dy) {
     if (this.t <= 0.001) return null;
     let tmin = -Infinity, tmax = Infinity;
     if (Math.abs(dx) < 1e-9) { if (ox <= this.x || ox >= this.right) return null; } else { let a = (this.x - ox) / dx, b = (this.right - ox) / dx; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
-    if (Math.abs(dy) < 1e-9) { if (oy <= this.y || oy >= this.bottom) return null; } else { let a = (this.y - oy) / dy, b = (this.bottom - oy) / dy; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
+    if (Math.abs(dy) < 1e-9) { if (oy <= this.top || oy >= this.bottom) return null; } else { let a = (this.top - oy) / dy, b = (this.bottom - oy) / dy; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
     if (tmax < 0 || tmin > tmax) return null;
-    const inside = ox > this.x && ox < this.right && oy > this.y && oy < this.bottom;
+    const inside = ox > this.x && ox < this.right && oy > this.top && oy < this.bottom;
     return inside ? tmax : (tmin > 0 ? tmin : null);
   }
   /** Outward normal of the boundary face closest to (px,py). */
   normalAt(px, py) {
-    const d = [[px - this.x, -1, 0], [this.right - px, 1, 0], [py - this.y, 0, -1], [this.bottom - py, 0, 1]];
+    const d = [[px - this.x, -1, 0], [this.right - px, 1, 0], [py - this.top, 0, -1], [this.bottom - py, 0, 1]];
     d.sort((a, b) => a[0] - b[0]);
     return { x: d[0][1], y: d[0][2] };
   }
@@ -544,6 +545,81 @@ export class Medium {
     // shimmering boundary curtain
     ctx.globalAlpha = 0.35 * this.t; ctx.strokeStyle = '#C8F4FF'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(this.x + 1.5, this.y); ctx.lineTo(this.x + 1.5, this.bottom); ctx.moveTo(this.right - 1.5, this.y); ctx.lineTo(this.right - 1.5, this.bottom); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
+ * Water: a tank/pool zone. Bodies inside get buoyancy (by their `density`) and drag (see World.substep); the cat swims.
+ * `level` 0..1 is how full the tank is (the surface is at `top`); with `requires` the tank fills while the channel is
+ * on (or drains, with `inverted`) at `speed` (fraction per second). It is also an optical Medium (n = 1.33): lasers
+ * bend at the surface. Draws a gauge plaque behind bodies and the translucent water over them.
+ */
+export class Water extends Medium {
+  constructor(x, y, w, h, opts = {}) {
+    super(x, y, w, h, { n: 1.33, requires: opts.requires, inverted: opts.inverted, color: opts.color || '#3FA7E0', label: opts.label ?? 'ВОДА' });
+    this.levelFull = opts.level ?? 1; this.levelEmpty = opts.levelEmpty ?? 0; this.speed = opts.speed || 0.12;
+    this.level = this.on ? this.levelFull : this.levelEmpty;
+    this.t = this.level > 0.001 ? 1 : 0; this.n = 1.33;
+    this.flow = 0;      // -1 draining, 0 still, +1 filling (for sound/visuals)
+  }
+  get top() { return this.bottom - this.h * this.level; }
+  /** 0..1 how much of the body is below the surface (0 when the body is horizontally outside the tank). */
+  submersion(b) {
+    if (this.level <= 0.001 || b.cx <= this.x || b.cx >= this.right) return 0;
+    const over = Math.min(b.bottom, this.bottom) - Math.max(b.y, this.top);
+    return over <= 0 ? 0 : Math.min(1, over / b.h);
+  }
+  update(dt, game) {
+    let want = !this.requires || game.channels.test(this.requires); if (this.inverted) want = !want;
+    if (want !== this.on) { this.on = want; game.sfx('valve'); }
+    const target = this.on ? this.levelFull : this.levelEmpty;
+    const prev = this.level;
+    this.level = target > this.level ? Math.min(target, this.level + this.speed * dt) : Math.max(target, this.level - this.speed * dt);
+    this.flow = this.level > prev ? 1 : this.level < prev ? -1 : 0;
+    this.t = this.level > 0.001 ? 1 : 0; this.n = 1.33;
+  }
+  draw(ctx, time) {
+    // tank outline (dashed) + gauge
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120,200,240,0.45)'; ctx.lineWidth = 2; ctx.setLineDash([4, 8]); ctx.lineDashOffset = -time * 10;
+    ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2); ctx.setLineDash([]);
+    if (this.requires) {
+      ctx.fillStyle = 'rgba(20,26,34,0.85)'; ctx.fillRect(this.x + 6, this.y + 6, 78, 30);
+      ctx.strokeStyle = this.color; ctx.lineWidth = 1; ctx.strokeRect(this.x + 6.5, this.y + 6.5, 78, 30);
+      ctx.fillStyle = this.color; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(this.label, this.x + 11, this.y + 17);
+      ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 12px monospace';
+      ctx.fillText(`${Math.round(this.level * 100)} %${this.flow > 0 ? ' ▲' : this.flow < 0 ? ' ▼' : ''}`, this.x + 11, this.y + 31);
+    }
+    ctx.restore();
+  }
+  drawOverlay(ctx, time) {
+    if (this.level <= 0.001) return;
+    const top = this.top, h = this.bottom - top;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(this.x, top - 4, this.w, h + 4); ctx.clip();
+    const g = ctx.createLinearGradient(0, top, 0, this.bottom); g.addColorStop(0, 'rgba(90,190,240,0.40)'); g.addColorStop(1, 'rgba(20,80,150,0.60)');
+    ctx.fillStyle = g; ctx.fillRect(this.x, top, this.w, h);
+    // caustic streaks
+    ctx.globalAlpha = 0.10; ctx.strokeStyle = '#DFF6FF'; ctx.lineWidth = 2;
+    for (let i = 0; i < Math.max(2, this.w / 48); i++) {
+      const sx = this.x + ((i * 53 + this.seed * 3) % this.w), ph = time * 0.8 + i;
+      ctx.beginPath(); ctx.moveTo(sx + Math.sin(ph) * 6, top + 6); ctx.lineTo(sx + Math.cos(ph * 0.7) * 10, this.bottom - 4); ctx.stroke();
+    }
+    // bubbles
+    ctx.globalAlpha = 0.45; ctx.fillStyle = '#EAFBFF';
+    const count = Math.min(40, Math.floor(this.w * h / 4000)) + (this.flow ? 12 : 0);
+    for (let i = 0; i < count; i++) {
+      const s = (i * 37 + this.seed * 11) % 101 / 101, s2 = (i * 53 + this.seed * 7) % 97 / 97;
+      const bx = this.x + s * this.w + Math.sin(time * 1.5 + i) * 3;
+      const by = this.bottom - (((s2 * h + time * (14 + s * 20)) % h) + h) % h;
+      if (by > top + 2) { ctx.beginPath(); ctx.arc(bx, by, 1 + s2 * 1.5, 0, Math.PI * 2); ctx.fill(); }
+    }
+    // surface: bright wavy line + foam highlight
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = '#EAFBFF'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = 0; x <= this.w; x += 5) { const y = top + Math.sin(x * 0.09 + time * 2.6) * 1.8 + Math.sin(x * 0.031 - time * 1.7) * 1.2; if (x === 0) ctx.moveTo(this.x + x, y); else ctx.lineTo(this.x + x, y); }
+    ctx.stroke();
     ctx.restore();
   }
 }

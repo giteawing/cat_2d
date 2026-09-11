@@ -25,7 +25,7 @@ Open `index.html` through the server (ES modules need http).
 | Q (or F) | toggle Quantum Tunneling mode (once picked up, level 7+): run into a potential barrier → 25% chance to pass through, otherwise an elastic bounce. The cat gets a glowing blue outline while the mode is on |
 | Space | jump (variable height, coyote time, jump buffer) |
 | W / ↑ | climb ladder / look up |
-| S / ↓ | crouch / climb down / look down; S + Space drops through thin platforms |
+| S / ↓ | crouch / climb down / look down; S + Space drops through thin platforms; in water: dive (W surfaces, Space at the surface hops out) |
 | 1 | Gravity Gun |
 | 2 | Portal Gun |
 | Mouse | aim (the cat turns and points the gun) |
@@ -75,6 +75,17 @@ single beam can light several receivers one after another. Crates and other prop
    with an optically dense gas (`Medium`, n = 1.5) and the beam bends at the surface by Snell's law onto a floor receiver
    (a dashed ghost shows the un-bent path; the haze and an `n = …` readout show the medium).
 
+## World 3 — Аквариум (in progress, 1 level)
+
+New mechanic: **water** (`Water` zones). The cat swims (A/D paddle, S dive, W surface, Space at the surface hops out
+~2 tiles); every prop has a density — wood, soft toys, the rubber duck and hollow barrels float, metal/ceramic/glass
+sink; a valve (channel) fills or drains a tank and whatever floats rises with it. Water is also an optical medium
+(n = 1.33), so tilted beams refract at the surface.
+
+1. **Аквариум** — swim across a pool and dive for a gift (underwater secret tunnel), a well that fills to lift the cat to
+   the rim, a pressure plate on a pool floor that only a sinking metal cube can hold, and a raft carrying a mirror that a
+   rising tank lifts into a ceiling beam.
+
 Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
 
 ## Project layout
@@ -119,8 +130,8 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 151 checks
-npm run walk                # plays all 12 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
+cd .. && npm test           # 171 checks
+npm run walk                # plays all 13 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
 `tools/walkthroughs/levelNN.mjs` are the per-level scripts (each prints ✓/✗ per step and a final RESULT line); `lib.mjs` holds the shared helpers (walkTo, runJump, climbTo, peekAimClick, grab/dropAt/throwAt, enter…).

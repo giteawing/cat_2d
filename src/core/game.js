@@ -25,7 +25,7 @@ import { drawGiftBox, GIFT_TYPES } from '../gifts/gift.js';
 export const VIEW_W = 960;
 export const VIEW_H = 540;
 export const ZOOM = 1.25;
-const WORLD_NAMES = { 1: 'Дом и лаборатория', 2: 'Обсерватория' };   // world pixels are scaled up for a cosier, more readable picture
+const WORLD_NAMES = { 1: 'Дом и лаборатория', 2: 'Обсерватория', 3: 'Аквариум' };   // world pixels are scaled up for a cosier, more readable picture
 const FIXED_DT = 1 / 120;
 
 export class Game {
@@ -95,6 +95,11 @@ export class Game {
     this.world.onBreak = (b) => this.onBreak(b);
     this.world.onTileBreak = (tiles, b) => this.onTileBreak(tiles, b);
     this.world.onField = (b, kind, x, y, nx, ny, speed) => this.onField(b, kind, x, y, nx, ny, speed);
+    this.world.onSplash = (b, speed, x, y) => {
+      this.audio.play('splash', { speed });
+      for (let i = 0; i < 6 + Math.min(10, speed / 60); i++) this.effects.spawnParticle(x + (Math.random() - 0.5) * b.w, y, (Math.random() - 0.5) * 160, -80 - Math.random() * Math.min(260, speed * 0.6), 0.5 + Math.random() * 0.3, i % 3 ? 'rgba(180,225,255,0.85)' : '#FFFFFF', 2 + Math.random() * 2, 700);
+      if (b.kind === 'cat') { this.player.playEmote('surprise', 0.35); this.effects.shake(Math.min(3, speed / 300)); }
+    };
     this.portals.onTeleport = (b, from, to) => this.onTeleport(b, from, to);
     this.camera.snapTo(this.player.cx, this.player.cy);
     this.hud.message = null;
@@ -168,6 +173,8 @@ export class Game {
       case 'land': this.audio.play('land', data); if (data.speed > 250) this.effects.dust(this.player.cx, this.player.feetY, 6); break;
       case 'step': this.audio.play('step', data); break;
       case 'teleport': this.audio.play('teleport'); break;
+      case 'paddle': this.audio.play('paddle'); this.effects.spawnParticle(this.player.cx + (Math.random() - 0.5) * 20, this.player.body.y + 14, (Math.random() - 0.5) * 80, -60 - Math.random() * 60, 0.35, 'rgba(200,235,255,0.8)', 2, 600); break;
+      case 'splashOut': this.audio.play('splash', { speed: 300 }); for (let i = 0; i < 10; i++) this.effects.spawnParticle(this.player.cx + (Math.random() - 0.5) * 30, this.player.body.bottom, (Math.random() - 0.5) * 200, -100 - Math.random() * 200, 0.5, 'rgba(180,225,255,0.85)', 2 + Math.random() * 2, 700); break;
       case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: this.player.cx, y: this.player.body.cy }, '#7FD3FF', 14, 160); this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в потенциальный барьер — шанс пройти 25%', 2.5); break;
       case 'tunnelOff': this.audio.play('tunnelOff'); this.hud.show('Квантовое туннелирование: ВЫКЛ', '', 1.5); break;
     }

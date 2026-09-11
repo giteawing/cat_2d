@@ -10,7 +10,7 @@ export const PROPS = {
   crate:   { w: 32, h: 32, mass: 3, friction: 0.7, bounce: 0.05, material: 'wood', portalable: true, colors: ['#B07A3E'] },
   bigCrate:{ w: 48, h: 48, mass: 7, friction: 0.8, bounce: 0.02, material: 'wood', portalable: true, colors: ['#9C6A32'] },
   cube:    { w: 30, h: 30, mass: 3, friction: 0.7, bounce: 0.05, material: 'metal', portalable: true, colors: ['#8FA3B8'] },
-  barrel:  { w: 30, h: 40, mass: 5, friction: 0.55, bounce: 0.08, material: 'metal', portalable: true, colors: ['#5D7CA6', '#A65D5D'] },
+  barrel:  { w: 30, h: 40, mass: 5, friction: 0.55, bounce: 0.08, material: 'metal', density: 0.5, portalable: true, colors: ['#5D7CA6', '#A65D5D'] },   // hollow: floats
   metalBox:{ w: 28, h: 28, mass: 4, friction: 0.65, bounce: 0.05, material: 'metal', portalable: true, colors: ['#6B7A8C'] },
   mirror:  { w: 32, h: 32, mass: 3, friction: 0.8, bounce: 0.02, material: 'metal', portalable: true, colors: ['#DDE8F2'] },   // reflects lasers 90° (facing = mirror diagonal)
   // ---- fun clutter ----
@@ -36,8 +36,12 @@ export const PROPS = {
   teddy:   { w: 18, h: 22, mass: 0.5, friction: 0.9, bounce: 0.2, material: 'soft', colors: ['#B98A5A', '#D9B3A0'] },
   yarn:    { w: 14, h: 14, mass: 0.25, friction: 0.5, bounce: 0.4, material: 'soft', rolls: true, colors: ['#F26B9A', '#6BC9F2', '#F2D06B'] },
   giftBox: { w: 20, h: 18, mass: 0.7, friction: 0.7, bounce: 0.1, material: 'wood', colors: ['#5BC0DE', '#F06A8A', '#9B6BE0', '#FFD34D'] },
-  tire:    { w: 26, h: 26, mass: 2.0, friction: 0.5, bounce: 0.5, material: 'soft', rolls: true, colors: ['#333940'] },
+  tire:    { w: 26, h: 26, mass: 2.0, friction: 0.5, bounce: 0.5, material: 'soft', density: 0.7, rolls: true, colors: ['#333940'] },
+  duck:    { w: 16, h: 14, mass: 0.2, friction: 0.5, bounce: 0.2, material: 'soft', density: 0.25, colors: ['#FFD93B', '#FFB347'] },   // rubber duck: always floats upright-ish
 };
+
+/** Relative density (water = 1) by material: wood/soft things float, metal/ceramic/glass sink. */
+const DENSITY = { wood: 0.6, soft: 0.35, ceramic: 1.8, metal: 2.6, glass: 1.5 };
 
 let propSeed = 1;
 export function makeProp(kind, x, y, opts = {}) {
@@ -51,6 +55,7 @@ export function makeProp(kind, x, y, opts = {}) {
     kind, color, maxSpeed: 1500,
   });
   b.material = d.material;
+  b.density = opts.density ?? d.density ?? DENSITY[d.material] ?? 1;
   b.variant = Math.floor(rnd() * 4);
   b.breakSpeed = opts.breakSpeed || 520;
   b.tag = opts.tag || '';
