@@ -211,7 +211,7 @@ export class Game {
     this.audio.play('break'); this.audio.play('impact', { material: 'wood', speed: 900 }); this.input.rumble(0.8, 0.5, 200);
     this.effects.shake(6);
     for (const [cx, cy] of tiles) for (let i = 0; i < 4; i++) this.effects.spawnParticle(cx * TILE + Math.random() * TILE, cy * TILE + Math.random() * TILE, (Math.random() - 0.5) * 300 + b.vx * 0.2, -Math.random() * 250, 0.8, ['#B9A08A', '#8A705A', '#D8C4AE'][i % 3], 3 + Math.random() * 3, 900);
-    this.tiles.build();
+    this.tiles.updateCells(tiles);
     this.hud.show('Стена разрушена!', '', 2);
   }
   onTeleport(b, from, to) {
@@ -398,6 +398,7 @@ export class Game {
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < 8) {
+      this.frameId = (this.frameId || 0) + 1;      // physics-step counter (per-step caches, e.g. Laser optics)
       for (const p of this.puzzles) p.update(FIXED_DT, this);
       this.updateMirrors(inp);   // after puzzles: a lever/button next to a mirror gets the E press first
       this.world.step(FIXED_DT);
@@ -487,8 +488,11 @@ export class Game {
     ctx.scale(ZOOM, ZOOM);
     this.tiles.drawBackground(ctx, cam, cam.w, cam.h, this.time);
     ctx.translate(-Math.round(cam.x + cam.shakeX), -Math.round(cam.y + cam.shakeY));
+    // view-culling helper for static scenery on big maps (generous margin: decor is drawn around its anchor)
+    const vx0 = cam.x - 160, vy0 = cam.y - 160, vx1 = cam.x + cam.w + 160, vy1 = cam.y + cam.h + 160;
+    const inView = (x, y, w = 0, h = 0) => x + w > vx0 && x < vx1 && y + h > vy0 && y < vy1;
     // decor behind tiles
-    for (const d of this.decor) drawDecor(ctx, d, this.time);
+    for (const d of this.decor) if (inView(d.x, d.y, d.w, d.h)) drawDecor(ctx, d, this.time);
     // doors are drawn before tiles so they slide "into" walls
     for (const p of this.puzzles) if (p.body && p.body.kind === 'door') p.draw(ctx, this.time);
     this.tiles.drawTiles(ctx, cam, cam.w + 2, cam.h + 2);
@@ -504,10 +508,10 @@ export class Game {
     // pickups
     for (const p of this.pickups) if (!p.taken) drawPickup(ctx, p, this.time);
     // gifts
-    for (const g of this.gifts) g.draw(ctx, this.time);
+    for (const g of this.gifts) if (inView(g.x, g.y, g.w, g.h)) g.draw(ctx, this.time);
     // physics bodies (props)
     for (const b of this.world.bodies) {
-      if (b.dead || b.kind === 'cat' || b.type === 'kinematic') continue;
+      if (b.dead || b.kind === 'cat' || b.type === 'kinematic' || !inView(b.x, b.y, b.w, b.h)) continue;
       drawProp(ctx, b, this.time);
     }
     // gravity beam
@@ -521,7 +525,7 @@ export class Game {
     // interact prompts
     for (const it of this.interactables) if (it.near) { ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3; const y = it.y - 12 + Math.sin(this.time * 5) * 2; const lbl = `[${this.btn('e')}]`; ctx.strokeText(lbl, it.x, y); ctx.fillText(lbl, it.x, y); }
     // signs
-    for (const s of this.signs) drawSign(ctx, s);
+    for (const s of this.signs) if (inView(s.x, s.y, TILE, TILE)) drawSign(ctx, s);
     this.effects.draw(ctx, this.time);
     ctx.restore();
   }

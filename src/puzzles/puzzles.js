@@ -291,8 +291,9 @@ export class FieldGate {
     if (want !== this.on) {
       const first = this.on === null;
       this.on = want;
-      for (let cy = this.ty; cy < this.ty + this.hT; cy++) for (let cx = this.tx; cx < this.tx + this.wT; cx++) game.map.set(cx, cy, want ? T.EFIELD : T.EMPTY);
-      game.tiles.build();
+      const cells = [];
+      for (let cy = this.ty; cy < this.ty + this.hT; cy++) for (let cx = this.tx; cx < this.tx + this.wT; cx++) { game.map.set(cx, cy, want ? T.EFIELD : T.EMPTY); cells.push([cx, cy]); }
+      game.tiles.updateCells(cells);
       if (!first) game.sfx(want ? 'fieldOn' : 'fieldOff');
     }
     this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 10));
@@ -338,7 +339,18 @@ export class Laser {
     const map = game.map, world = game.world, portals = game.portals;
     let ox = this.x, oy = this.y, dx = this.dx, dy = this.dy;
     const passShot = (cx, cy) => { const t = map.get(cx, cy); return map.blocksShot(t) && !map.isField(t); };
-    const media = game.puzzles.filter((q) => q instanceof Medium);
+    // per-frame cache shared by all lasers of the level: which puzzles/bodies can interact with a beam
+    let oc = game._optics;
+    if (!oc || oc.frame !== game.frameId || game.frameId === undefined) {
+      oc = game._optics = { frame: game.frameId, media: [], targets: [], bodies: [] };
+      for (const q of game.puzzles) {
+        if (q instanceof Medium) oc.media.push(q);
+        else if (q instanceof LaserReceiver) oc.targets.push({ box: q.box, receiver: q });
+        else if (q instanceof Door) oc.targets.push({ box: q.body, receiver: null });
+      }
+      for (const b of world.bodies) if (!b.dead && b.type !== BodyType.KINEMATIC && b.kind !== 'cat') oc.bodies.push(b);
+    }
+    const media = oc.media;
     const indexAt = (x, y) => { for (const m of media) if (m.contains(x, y)) return m.n; return 1; };
     for (let bounce = 0; bounce < 16; bounce++) {
       const n1 = indexAt(ox, oy);
@@ -346,19 +358,16 @@ export class Laser {
       const tileHit = map.raycast(ox, oy, dx, dy, 4000, null, passShot);
       const maxD = tileHit ? tileHit.dist : 4000;
       let bodyHit = null;
-      for (const b of world.bodies) {
-        if (b.dead || b.type === BodyType.KINEMATIC) continue;
-        if (b === this._skip || b.kind === 'cat') continue;   // the cat never blocks a beam (no damage, no confusion)
+      for (const b of oc.bodies) {
+        if (b === this._skip) continue;   // (the cat is never in the list: it never blocks a beam — no damage, no confusion)
         // mirrors get a forgiving 8 px margin so the cube does not have to sit exactly under the beam
         const t = rayBoxT(ox, oy, dx, dy, b.kind === 'mirror' ? padBox(b, 8) : b, bodyHit ? bodyHit.dist : maxD);
         if (t !== null && t > 0.5) bodyHit = { dist: t, body: b };
       }
       // receivers (not physics bodies) and closed doors
-      for (const q of game.puzzles) {
-        const b = q instanceof LaserReceiver ? q.box : (q instanceof Door ? q.body : null);
-        if (!b) continue;
-        const t = rayBoxT(ox, oy, dx, dy, b, bodyHit ? bodyHit.dist : maxD);
-        if (t !== null && t > 0.5) bodyHit = { dist: t, body: b, receiver: q instanceof LaserReceiver ? q : null };
+      for (const q of oc.targets) {
+        const t = rayBoxT(ox, oy, dx, dy, q.box, bodyHit ? bodyHit.dist : maxD);
+        if (t !== null && t > 0.5) bodyHit = { dist: t, body: q.box, receiver: q.receiver };
       }
       // portal on the way? (beam crosses a portal plane inside its span)
       let portalHit = null;

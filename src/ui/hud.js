@@ -99,13 +99,19 @@ export class HUD {
       ctx.font = '13px "Trebuchet MS", sans-serif'; ctx.textAlign = 'center';
       // word-wrap long sign texts so they never run off the screen
       const maxW = Math.min(w - 40, 720);
-      const lines = []; let line = '';
-      for (const word of hint.split(' ')) {
-        const test = line ? line + ' ' + word : word;
-        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+      // (measureText is costly — the wrapped layout is cached per hint string)
+      let wrap = this._wrap;
+      if (!wrap || wrap.hint !== hint || wrap.maxW !== maxW) {
+        const lines = []; let line = '';
+        for (const word of hint.split(' ')) {
+          const test = line ? line + ' ' + word : word;
+          if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+        }
+        if (line) lines.push(line);
+        wrap = this._wrap = { hint, maxW, lines, tw: Math.max(...lines.map((l) => ctx.measureText(l).width)) + 24 };
       }
-      if (line) lines.push(line);
-      const lh = 17, tw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 24, th = lines.length * lh + 11;
+      const { lines, tw } = wrap;
+      const lh = 17, th = lines.length * lh + 11;
       panel(ctx, w / 2 - tw / 2, h - 12 - th, tw, th);
       ctx.fillStyle = '#fff';
       lines.forEach((l, i) => ctx.fillText(l, w / 2, h - 12 - th + 19 + i * lh));

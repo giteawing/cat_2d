@@ -279,7 +279,7 @@ const R = [
   // a switchable gate never re-forms around a body standing in its passage
   { const { FieldGate } = await import('../src/puzzles/puzzles.js');
     const { map, world, portals } = room(R); const ch = new Channels();
-    const game = { map, world, portals, channels: ch, puzzles: [], sfx() {}, tiles: { build() {} } };
+    const game = { map, world, portals, channels: ch, puzzles: [], sfx() {}, tiles: { build() {}, updateCells() {} } };
     const g = new FieldGate(10, 1, 1, 10, 'sw'); ch.set('sw', true); g.update(1 / 60, game);
     check('gate off while powered', g.on === false && map.get(10, 5) !== 9);
     const b = world.add(makeProp('crate', 10 * TILE + 2, 11 * TILE - 40)); for (let i = 0; i < 10; i++) world.step(1 / 60);

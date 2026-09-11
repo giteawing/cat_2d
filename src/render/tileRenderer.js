@@ -16,17 +16,25 @@ export class TileRenderer {
     this.themeName = theme;
     this.canvas = null;
     this.bgCanvas = null;
+    this.wallpaper = null;      // cached CanvasPattern for the parallax wallpaper
     this.build();
   }
 
   build() {
-    const map = this.map, th = this.theme;
+    const map = this.map;
     const c = document.createElement('canvas');
     c.width = map.width; c.height = map.height;
-    const ctx = c.getContext('2d');
-    // background wall pattern (behind everything, inside the level)
-    for (let cy = 0; cy < map.rows; cy++) {
-      for (let cx = 0; cx < map.cols; cx++) {
+    this.canvas = c;
+    this.drawRegion(c.getContext('2d'), 0, 0, map.cols - 1, map.rows - 1);
+  }
+
+  /** Redraw only the tiles in [x0..x1]×[y0..y1] (inclusive) into the cache. */
+  drawRegion(ctx, x0, y0, x1, y1) {
+    const map = this.map, th = this.theme;
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(map.cols - 1, x1); y1 = Math.min(map.rows - 1, y1);
+    ctx.clearRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
         const t = map.get(cx, cy);
         const x = cx * TILE, y = cy * TILE;
         if (t === T.SOLID) drawBrick(ctx, x, y, th, cx, cy, map);
@@ -39,7 +47,19 @@ export class TileRenderer {
         else if (t === T.EFIELD) drawFieldEmitters(ctx, x, y, th, cx, cy, map);
       }
     }
-    this.canvas = c;
+  }
+
+  /**
+   * Incremental update after a few tiles changed (a gate toggled, a wall broke): repaints just those cells plus a
+   * one-tile margin (brick edges and field emitter caps depend on their neighbours). Much cheaper than build() on
+   * 150×36 maps. `cells` = iterable of [cx, cy].
+   */
+  updateCells(cells) {
+    if (!this.canvas) return this.build();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [cx, cy] of cells) { x0 = Math.min(x0, cx); y0 = Math.min(y0, cy); x1 = Math.max(x1, cx); y1 = Math.max(y1, cy); }
+    if (x0 === Infinity) return;
+    this.drawRegion(this.canvas.getContext('2d'), x0 - 1, y0 - 1, x1 + 1, y1 + 1);
   }
 
   drawBackground(ctx, cam, w, h, time) {
@@ -63,13 +83,16 @@ export class TileRenderer {
     ctx.globalAlpha = 0.9;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = th.bg2;
+    // wallpaper motif: one 64×64 cell rendered once into a repeating pattern (a few hundred arcs per frame otherwise)
     const s = 64;
-    const ox = ((px2 % s) + s) % s, oy = ((py2 % s) + s) % s;
-    for (let y = -s; y < h + s; y += s) for (let x = -s; x < w + s; x += s) {
-      ctx.beginPath(); ctx.arc(x + ox + s / 2, y + oy + s / 2, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillRect(x + ox + 8, y + oy + 8, 3, 3); ctx.fillRect(x + ox + s - 11, y + oy + s - 11, 3, 3);
+    if (!this.wallpaper) {
+      const pc = document.createElement('canvas'); pc.width = s; pc.height = s; const p = pc.getContext('2d');
+      p.fillStyle = th.bg2; p.beginPath(); p.arc(s / 2, s / 2, 5, 0, Math.PI * 2); p.fill();
+      p.fillRect(8, 8, 3, 3); p.fillRect(s - 11, s - 11, 3, 3);
+      this.wallpaper = ctx.createPattern(pc, 'repeat');
     }
+    const ox = ((px2 % s) + s) % s, oy = ((py2 % s) + s) % s;
+    ctx.save(); ctx.translate(ox, oy); ctx.fillStyle = this.wallpaper; ctx.fillRect(-s, -s, w + 2 * s, h + 2 * s); ctx.restore();
     // stars & a moon for the night observatory
     if (this.themeName === 'observatory') {
       for (let i = 0; i < 70; i++) {
