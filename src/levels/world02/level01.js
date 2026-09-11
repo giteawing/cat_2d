@@ -46,12 +46,12 @@ export const level01 = {
     // A
     k.message(1, 16, 8, 10, 'Обсерватория', 'Луч включает приёмник. Ничто не должно мешать');
     k.sign(4, 23, 'Красный луч питает приёмник на стене. Приёмник ЗАПОМИНАЕТ свет — дверь не закроется. Убери ящик гравипушкой — например, в ямку слева.');
-    k.laser(1, 24, 'right');                                   // 1.5 tiles above the floor: a crate blocks it, small clutter does not
+    k.laser(1, 25, 'right');                                   // half a tile above the floor: crates/mirrors block it, low clutter (≤14 px) does not
     k.prop('crate', 12, 26);
-    k.receiver(23, 24, 'rA', { face: 'left' });
+    k.receiver(23, 25, 'rA', { face: 'left', size: 40 });
     k.door(24, 22, 2, 4, 'rA', { dir: 'up', travel: 4 * 32 });
     k.gift(8, 21, 'normal', 'g1');
-    k.clutter(['book', 'cup', 'jar', 'figurine'], 15, 26, 6, 201);
+    k.clutter(['book', 'cup', 'jar', 'can'], 15, 26, 6, 201);
     k.decor('poster', 17, 18, { w: 72, h: 28, text: 'ЛУЧ → ПРИЁМНИК', color: '#FFE9B8' });
     k.decor('window', 3, 16, { w: 64, h: 64 });
     // B

@@ -54,7 +54,7 @@ Hints switch to gamepad labels automatically; rumble on throws, portals, gifts a
 
 After the last level of a world a **world summary** screen lists every level with its gifts and secrets.
 
-## World 2 — Обсерватория (in progress)
+## World 2 — Обсерватория (4 levels)
 
 New mechanic: **lasers**. `Laser` emitters shoot a red beam that stops at solid tiles (grates and fields let it pass),
 is bounced 90° by **mirror cubes** (a grabbable prop; `E` next to a cube flips its diagonal `/` ↔ `\`), travels through
@@ -64,6 +64,14 @@ single beam can light several receivers one after another. Crates and other prop
 
 1. **Обсерватория** — crate out of the beam, mirror under a ceiling beam (wrong way round: flip it), beam through floor
    portals to a ceiling receiver, a wall-portal secret, and a one-beam/two-receivers finale.
+2. **Зеркальный зал** — two-mirror chain (one on a shelf), a lever-powered emitter whose beam crosses a grate (portal
+   through), two lasers / one mirror (latching lets you reuse it), a pillar-receiver secret and a 3-receivers/2-mirrors finale.
+3. **Лифтовая шахта** — a mirror riding a lift through a beam, **beam locks** (`!rB` with a non-latching receiver: the door
+   is open only while the beam is blocked — park a crate in it), a beam routed mirror → ceiling portal → floor portal, and a
+   flip-in-flight finale on a horizontal lift.
+4. **Купол** — the World 2 finale: a mirror bobbing in a fan column, a beam lock behind a permanent field (crate through a
+   ceiling portal), one fan-lifted mirror for two receivers at different heights, and a lift mirror → floor mirror →
+   receiver chain with a third-mirror secret.
 
 Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
 
@@ -109,8 +117,8 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 123 checks
-npm run walk                # plays all 9 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
+cd .. && npm test           # 141 checks
+npm run walk                # plays all 12 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 
 `tools/walkthroughs/levelNN.mjs` are the per-level scripts (each prints ✓/✗ per step and a final RESULT line); `lib.mjs` holds the shared helpers (walkTo, runJump, climbTo, peekAimClick, grab/dropAt/throwAt, enter…).

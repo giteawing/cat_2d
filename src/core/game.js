@@ -363,7 +363,7 @@ export class Game {
     }
     if (!best) return;
     this.interactables.push({ x: best.cx, y: best.y - 4, near: true, label: 'E' });
-    if (inp.interactPressed && !this.weapons.held) {
+    if (inp.interactPressed && !this.weapons.held && !this.interactables.some((it) => it.near && it.label === 'E' && it.x !== best.cx)) {
       inp.interactPressed = false;
       best.mirrorDir = -(best.mirrorDir || 1); best.wake();
       this.sfx('mirrorFlip');
@@ -398,8 +398,8 @@ export class Game {
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < 8) {
-      this.updateMirrors(inp);
       for (const p of this.puzzles) p.update(FIXED_DT, this);
+      this.updateMirrors(inp);   // after puzzles: a lever/button next to a mirror gets the E press first
       this.world.step(FIXED_DT);
       this.accumulator -= FIXED_DT; steps++;
       inp.pendingSteps = false; inp.interactPressed = false;   // one-shots consumed by this step
