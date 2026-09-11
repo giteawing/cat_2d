@@ -22,7 +22,7 @@ Open `index.html` through the server (ES modules need http).
 |---|---|
 | A / D, ← / → | walk |
 | Shift | run |
-| Q (or F) | toggle Quantum Tunneling mode (once picked up, level 7+): run into an electric field → 25% chance to pass through, otherwise an elastic bounce. The cat gets a glowing blue outline while the mode is on |
+| Q (or F) | toggle Quantum Tunneling mode (once picked up, level 7+): run into a potential barrier → 25% chance to pass through, otherwise an elastic bounce. The cat gets a glowing blue outline while the mode is on |
 | Space | jump (variable height, coyote time, jump buffer) |
 | W / ↑ | climb ladder / look up |
 | S / ↓ | crouch / climb down / look down; S + Space drops through thin platforms |
@@ -49,7 +49,7 @@ Hints switch to gamepad labels automatically; rumble on throws, portals, gifts a
 4. **Подвал** (lab) — momentum flings, thrown-object button, fan, ceiling delivery.
 5. **Оранжерея** (garden) — two-plate AND door, chasm crossing, lift with a mid-ride shot, perch fling.
 6. **Чердак** — finale combining everything.
-7. **Квантовая лаборатория** — electric fields (`~` tiles: thin floor-to-ceiling walls, a field floor and a field ceiling) and the Quantum Tunneling mode (Q): 25% chance to run through a field, elastic bounce otherwise. Objects always bounce; portal shots pass through fields.
+7. **Квантовая лаборатория** — potential barriers (`~` tiles: thin floor-to-ceiling walls, a barrier floor and a barrier ceiling) and the Quantum Tunneling mode (Q): 25% chance to run through a barrier, elastic bounce otherwise. Objects always bounce; portal shots pass through barriers.
 8. **Генераторная** — switchable fields (`FieldGate`: a plate / button / lever powers a field down; `plD&levD` style AND-requirements), a field as an upper floor, portals through permanent fields, and a tunneling-only secret.
 
 After the last level of a world a **world summary** screen lists every level with its gifts and secrets.
@@ -117,7 +117,7 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 141 checks
+cd .. && npm test           # 146 checks
 npm run walk                # plays all 12 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 

@@ -51,7 +51,7 @@ export class LevelKit {
   door(tx, ty, wTiles, hTiles, requires, opts = {}) { const d = new Door(px(tx), px(ty), px(wTiles), px(hTiles), requires, opts); this.game.puzzles.push(d); this.game.world.add(d.body); return d; }
   platform(tx, ty, wTiles, tx2, ty2, opts = {}) { const p = new MovingPlatform(px(tx), px(ty), px(wTiles), opts.h || 12, px(tx2), px(ty2), opts); this.game.puzzles.push(p); this.game.world.add(p.body); return p; }
   trigger(tx, ty, w, h, fn, opts = {}) { const t = new Trigger(px(tx), px(ty), px(w), px(h), fn, opts); this.game.puzzles.push(t); return t; }
-  /** Switchable electric field: ON while `requires` is not met (default) — a plate/lever/button switches it off. */
+  /** Switchable potential barrier ('~' field tiles): ON while `requires` is not met (default) — a plate/lever/button switches it off. */
   fieldGate(tx, ty, w, h, requires, opts = {}) { const f = new FieldGate(tx, ty, w, h, requires, opts); this.game.puzzles.push(f); return f; }
   /** Laser emitter mounted on the wall behind the EMPTY tile (tx,ty), firing `dir` ('right'|'left'|'up'|'down'). */
   laser(tx, ty, dir, opts = {}) {

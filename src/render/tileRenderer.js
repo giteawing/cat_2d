@@ -100,7 +100,7 @@ export class TileRenderer {
   }
 }
 
-/** Static part of an electric field tile: emitter caps where the field meets a solid wall/floor/ceiling. */
+/** Static part of a potential-barrier (field) tile: emitter caps where the field meets a solid wall/floor/ceiling. */
 function drawFieldEmitters(ctx, x, y, th, cx, cy, map) {
   const cap = (nx, ny) => {
     ctx.fillStyle = th.metalDark;

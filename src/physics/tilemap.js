@@ -12,7 +12,7 @@ export const T = {
   DECOR_BG: 6,     // background decoration (non-solid)
   GRATE: 7,        // solid metal grate: blocks bodies, but portal shots pass through
   BREAKABLE: 8,    // cracked bricks: shatter when hit by a heavy/fast object
-  EFIELD: 9,       // electric field: blocks bodies (elastic bounce), portal shots pass through; a cat in quantum
+  EFIELD: 9,       // potential barrier ("электрополе" in older notes): blocks bodies (elastic bounce), portal shots pass through; a cat in quantum
                    // tunneling mode running into it passes through with 25% probability
 };
 

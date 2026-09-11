@@ -268,7 +268,7 @@ export class Fan {
 }
 
 /**
- * FieldGate: an electric field that can be switched off. The field is ON while its requirement is NOT met
+ * FieldGate: a potential barrier that can be switched off. The field is ON while its requirement is NOT met
  * (a plate/lever/button powers it down); `inverted` flips that. Implemented by writing EFIELD/EMPTY tiles into the
  * map, so the physics (bounce / tunneling / portal shots pass) is exactly that of a built-in field.
  * Safety: the field never re-forms while something is standing inside it.
@@ -315,7 +315,7 @@ export class FieldGate {
 
 /**
  * Laser: a wall-mounted emitter that shoots a red beam in direction (dx,dy). The beam
- *  - stops at solid tiles (grates and electric fields let it pass),
+ *  - stops at solid tiles (grates and potential barriers let it pass),
  *  - is reflected 90° by 'mirror' props (mirrorDir +1 = '/', -1 = '\\'),
  *  - travels through linked portals (position & direction transformed),
  *  - is blocked by other bodies (a crate can shield a receiver), the cat included (harmless: no damage in this game),

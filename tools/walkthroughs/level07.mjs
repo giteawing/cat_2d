@@ -1,7 +1,7 @@
 import { begin, T } from './lib.mjs';
 const w = await begin(6); const { d, p, game } = w;
 
-/** Run (Shift) at an electric field until the cat tunnels through (25% per attempt; bounces re-run automatically). */
+/** Run (Shift) at a potential barrier until the cat tunnels through (25% per attempt; bounces re-run automatically). */
 function tunnel(dir, pastX, max = 900) {
   let attempts = 0;
   const onField = game.world.onField; game.world.onField = (b, kind, ...r) => { if (b.kind === 'cat') attempts++; onField(b, kind, ...r); };

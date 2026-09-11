@@ -235,9 +235,9 @@ const R = [
   }
 }
 
-// ------------------------------------------------------------ unit: electric fields & quantum tunneling
+// ------------------------------------------------------------ unit: potential barriers (fields) & quantum tunneling
 {
-  console.log('Electric fields & quantum tunneling');
+  console.log('Potential barriers & quantum tunneling');
   const F = R.map((l, y) => (y >= 1 && y <= 10 ? l.slice(0, 10) + '~' + l.slice(11) : l));   // field wall at col 10
   // a thrown crate bounces back elastically
   { const { world } = room(F); const b = world.add(makeProp('crate', 8 * TILE, 8 * TILE)); b.vx = 600;
@@ -267,6 +267,26 @@ const R = [
     const { world } = room(G); const b = world.add(makeProp('crate', 6 * TILE, 2 * TILE));
     let bounced = false; for (let i = 0; i < 600; i++) { world.step(1 / 120); if (b.vy < -200) bounced = true; }
     check('crate bounces on a field floor, then settles on it', bounced && b.onGround && near(b.bottom, 8 * TILE, 0.5) && Math.abs(b.vy) < 1, `bounced=${bounced} bottom=${b.bottom} vy=${b.vy}`); }
+  // a body that ends up INSIDE a field (spawn / portal exit / shove) is never wedged: it can walk out either way
+  { const { world } = room(F); const p = new Player(10 * TILE + 16 - 15, 11 * TILE - 54); world.add(p.body); p.toggleTunneling(false);
+    p.setInput({ left: false, right: true, up: false, down: false, jump: false, run: false });
+    for (let i = 0; i < 120; i++) { world.step(1 / 120); if (i < 5) p.update(1 / 120, world); }
+    check('cat placed inside a field walks out of it (no wedge)', p.body.x >= 11 * TILE - 0.01 && !p.body.fieldPass, `x=${p.body.x} pass=${!!p.body.fieldPass}`); }
+  { const { world } = room(F); const p = new Player(10 * TILE + 16 - 15, 11 * TILE - 54); world.add(p.body); p.toggleTunneling(false);
+    p.setInput({ left: true, right: false, up: false, down: false, jump: false, run: false });
+    for (let i = 0; i < 120; i++) { world.step(1 / 120); if (i < 5) p.update(1 / 120, world); }
+    check('…and out the other way too', p.body.right <= 10 * TILE + 0.01, `right=${p.body.right}`); }
+  // a switchable gate never re-forms around a body standing in its passage
+  { const { FieldGate } = await import('../src/puzzles/puzzles.js');
+    const { map, world, portals } = room(R); const ch = new Channels();
+    const game = { map, world, portals, channels: ch, puzzles: [], sfx() {}, tiles: { build() {} } };
+    const g = new FieldGate(10, 1, 1, 10, 'sw'); ch.set('sw', true); g.update(1 / 60, game);
+    check('gate off while powered', g.on === false && map.get(10, 5) !== 9);
+    const b = world.add(makeProp('crate', 10 * TILE + 2, 11 * TILE - 40)); for (let i = 0; i < 10; i++) world.step(1 / 60);
+    ch.set('sw', false); for (let i = 0; i < 30; i++) { world.step(1 / 60); g.update(1 / 60, game); }
+    check('gate stays off while a crate sits in the passage', g.on === false && !map.rectHitsSolid(b.x + 2, b.y + 2, b.w - 4, b.h - 4), `on=${g.on}`);
+    b.x = 14 * TILE; for (let i = 0; i < 30; i++) { world.step(1 / 60); g.update(1 / 60, game); }
+    check('gate re-forms once the passage is clear', g.on === true && map.isField(map.get(10, 5)), `on=${g.on}`); }
 }
 
 // ------------------------------------------------------------ lasers, mirrors, receivers (World 2)

@@ -1,4 +1,4 @@
-// World 1 — Level 8: "Генераторная". Switchable electric fields (FieldGate): a plate / button / lever powers a field
+// World 1 — Level 8: "Генераторная". Switchable potential barriers (FieldGate): a plate / button / lever powers a barrier
 // down. Combines gates with portals and the gravity gun:
 //  A. intro: a crate on a plate switches the first gate off
 //  B. a permanent field, but a portal-able wall is visible beyond it: portal shots pass through fields → travel by portal
@@ -36,7 +36,7 @@ function buildMap() {
 
 export const level08 = {
   id: 'w1l8', world: 1, number: 8,
-  name: 'Генераторная', subtitle: 'Отключаемые поля, порталы и гравипушка',
+  name: 'Генераторная', subtitle: 'Отключаемые барьеры, порталы и гравипушка',
   theme: 'lab',
   map: buildMap(),
   start: [3, 30],
@@ -46,8 +46,8 @@ export const level08 = {
   giftCount: 5,
   setup(k, g) {
     // A
-    k.message(1, 20, 10, 10, 'Генераторная', 'Некоторые поля можно выключить');
-    k.sign(5, 27, 'Поле с лампочками на концах — ОТКЛЮЧАЕМОЕ. Его питание рвёт плита. Поставь на неё ящик.');
+    k.message(1, 20, 10, 10, 'Генераторная', 'Некоторые барьеры можно выключить');
+    k.sign(5, 27, 'Барьер с лампочками на концах — ОТКЛЮЧАЕМЫЙ. Его питание рвёт плита. Поставь на неё ящик.');
     k.prop('crate', 4, 30);
     k.plate(9, 30, 'plA');
     k.fieldGate(14, 20, 1, 10, 'plA');
@@ -55,15 +55,15 @@ export const level08 = {
     k.clutter(['jar', 'can', 'cup', 'book'], 20, 30, 6, 91);
     k.decor('poster', 22, 22, { w: 64, h: 28, text: 'ГЕНЕРАТОР №1', color: '#DDE6EE' });
     // B
-    k.sign(31, 27, 'Это поле не выключить. Но выстрел портальной пушки проходит сквозь него — а за ним кирпичная стена!');
-    k.sign(33, 27, 'Оранжевый — в стену за полем, синий — в пол здесь. И шагай в синий.');
+    k.sign(31, 27, 'Этот барьер не выключить. Но выстрел портальной пушки проходит сквозь него — а за ним кирпичная стена!');
+    k.sign(33, 27, 'Оранжевый — в стену за барьером, синий — в пол здесь. И шагай в синий.');
     k.gift(41, 28, 'normal', 'g2');
     k.lever(43, 30, 'levB');
     k.door(46, 26, 2, 4, 'levB', { dir: 'up', travel: 4 * 32 });
     k.clutter(['box', 'lamp', 'bottle', 'toyCube', 'ball'], 38, 30, 6, 92);
     k.decor('pipe', 31, 13, { w: 25 * 32, h: 6 }); k.decor('pipe', 47, 14, { w: 6, h: 12 * 32 });
     // C
-    k.sign(53, 27, 'Наверху пол из поля. Кнопка его выключает. Ящик вниз — на плиту, дверь откроется.');
+    k.sign(53, 27, 'Наверху пол из барьера. Кнопка его выключает. Ящик вниз — на плиту, дверь откроется.');
     k.button(63, 17, 'btnC', { dy: 6, label: '' });
     k.fieldGate(70, 18, 4, 1, 'btnC');
     k.prop('crate', 66, 18);
@@ -75,7 +75,7 @@ export const level08 = {
     k.funRoom(78, 30, 12, 94, 0.7);
     k.decor('window', 60, 6, { w: 96, h: 80 }); k.decor('lampHang', 84, 1);
     // D
-    k.sign(97, 27, 'Последнее поле питают ДВА источника: плита и рычаг на полке. Портал — в потолок ПРЯМО над полкой (встань под неё), второй — в пол.');
+    k.sign(97, 27, 'Последний барьер питают ДВА источника: плита и рычаг на полке. Портал — в потолок ПРЯМО над полкой (встань под неё), второй — в пол.');
     k.gift(101, 12, 'big', 'g4');
     k.lever(102, 14, 'levD');
     k.prop('crate', 112, 30);
@@ -83,7 +83,7 @@ export const level08 = {
     k.fieldGate(116, 12, 1, 18, 'plD&levD');
     k.clutter(['can', 'jar', 'bottle', 'box', 'cup'], 123, 30, 4, 95);
     k.decor('poster', 119, 20, { w: 60, h: 28, text: 'ВЫХОД ↓', color: '#FFE9B8' });
-    k.sign(125, 27, 'Дальше — металл и поле без выключателя. Только квантовый режим (Q) и разбег!');
+    k.sign(125, 27, 'Дальше — металл и барьер без выключателя. Только квантовый режим (Q) и разбег!');
     k.gift(135, 28, 'rare', 'g5');
     k.secret(132, 20, 6, 10, 's1');
     k.clutter(['giftBox', 'teddy', 'yarn'], 136.5, 30, 2, 96);   // keep the run-up back to the field clear

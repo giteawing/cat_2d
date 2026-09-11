@@ -120,7 +120,7 @@ export class Player {
     this.setCrouch(wantCrouch, world);
 
     let dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    if (b.knockback > 0) { if (dir !== 0) this.facing = dir; dir = 0; }   // flung back by an electric field: no control for a moment
+    if (b.knockback > 0) { if (dir !== 0) this.facing = dir; dir = 0; }   // flung back by a potential barrier: no control for a moment
     this.moveInput = dir;
     this.running = inp.run && !this.crouching;
     let maxSpeed = this.running ? RUN_SPEED : WALK_SPEED;

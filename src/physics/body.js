@@ -52,7 +52,7 @@ export class Body {
     this.tag = opts.tag || '';
     this.noCollideBodies = opts.noCollideBodies ?? false;
     this.releaseFrom = null; this.releaseUntil = 0;   // holder to ignore briefly after a throw/drop
-    this.tunneling = false;       // quantum tunneling mode (cat): may pass through electric fields
+    this.tunneling = false;       // quantum tunneling mode (cat): may pass through potential barriers (field tiles)
     this.fieldPass = null;        // Set of field tile indices the body is currently passing through
     this.fieldCooldown = 0;       // seconds until the next tunneling attempt
     this.knockback = 0;           // seconds of "flung back by a field" (controller ignores input)

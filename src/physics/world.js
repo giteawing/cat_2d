@@ -8,9 +8,9 @@ const SUBSTEPS = 3;
 const EPS = 0.01;
 const SKIN = 0.001;
 export const BREAK_MOMENTUM = 3000;
-export const TUNNEL_MIN_SPEED = 260;   // a body must hit an electric field at least this fast to attempt tunneling (run-up)
+export const TUNNEL_MIN_SPEED = 260;   // a body must hit a potential barrier (field tile) at least this fast to attempt tunneling (run-up)
 export const TUNNEL_CHANCE = 0.25;     // probability of passing through per attempt
-const FIELD_BOUNCE = 0.9;              // elastic bounce off an electric field wall
+const FIELD_BOUNCE = 0.9;              // elastic bounce off a potential-barrier wall
 const FIELD_BOUNCE_Y = 0.8;            // a field floor/ceiling is a slightly softer trampoline (settles sooner)
 
 export class World {
@@ -27,7 +27,7 @@ export class World {
     this.rng = Math.random;       // tunneling dice (replaceable for deterministic tests)
   }
 
-  /** Recompute which tiles a body may ignore this substep: portal apertures + an electric field it is tunneling through. */
+  /** Recompute which tiles a body may ignore this substep: portal apertures + a potential barrier it is tunneling through. */
   refreshIgnore(b) {
     let ig = this.portals ? this.portals.ignoreTilesFor(b) : null;
     if (b.fieldPass) {
@@ -40,8 +40,27 @@ export class World {
       if (!inside) b.fieldPass = null;
       else { ig = ig ? new Set(ig) : new Set(); for (const t of b.fieldPass) ig.add(t); }
     }
+    if (!b.fieldPass) {
+      // a body that somehow ended up INSIDE a field wall (spawned there, came out of a portal next to it, got shoved by a
+      // door or a stack, a gate that re-formed around it) must never be wedged: it gets a free pass through that field
+      // so it can simply walk/fall out of it in any direction
+      const k = this.fieldTileInside(b);
+      if (k >= 0) {
+        b.fieldPass = this.map.connectedField(k % this.map.cols, Math.floor(k / this.map.cols));
+        ig = ig ? new Set(ig) : new Set(); for (const t of b.fieldPass) ig.add(t);
+      }
+    }
     if (ig) this.frameIgnore.set(b.id, ig); else this.frameIgnore.delete(b.id);
     return ig;
+  }
+
+  /** Index of a field tile the body's core overlaps (-1 if none). */
+  fieldTileInside(b) {
+    const map = this.map, inset = 2;
+    const x0 = Math.floor((b.x + inset) / TILE), x1 = Math.floor((b.right - inset) / TILE);
+    const y0 = Math.floor((b.y + inset) / TILE), y1 = Math.floor((b.bottom - inset) / TILE);
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) if (map.isField(map.get(cx, cy))) return cy * map.cols + cx;
+    return -1;
   }
 
   /**

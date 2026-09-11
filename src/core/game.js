@@ -168,7 +168,7 @@ export class Game {
       case 'land': this.audio.play('land', data); if (data.speed > 250) this.effects.dust(this.player.cx, this.player.feetY, 6); break;
       case 'step': this.audio.play('step', data); break;
       case 'teleport': this.audio.play('teleport'); break;
-      case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: this.player.cx, y: this.player.body.cy }, '#7FD3FF', 14, 160); this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в электрополе — шанс пройти 25%', 2.5); break;
+      case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: this.player.cx, y: this.player.body.cy }, '#7FD3FF', 14, 160); this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в потенциальный барьер — шанс пройти 25%', 2.5); break;
       case 'tunnelOff': this.audio.play('tunnelOff'); this.hud.show('Квантовое туннелирование: ВЫКЛ', '', 1.5); break;
     }
   }
@@ -188,9 +188,9 @@ export class Game {
       if (isCat && speed > 250) { this.player.fieldFlash = 0.3; this.player.playEmote('surprise', 0.7); this.effects.shake(3); this.input.rumble(0.5, 0.3, 90); }
       // contextual hints (only when no other message is showing)
       if (isCat && speed >= 100 && !this.hud.message) {
-        if (!this.player.tunnelUnlocked) this.hud.show('Электрополе', 'Сквозь него не пройти… пока', 2);
-        else if (!this.player.tunneling) this.hud.show('Электрополе', `Включи квантовый режим: ${this.btn('q')}`, 2.5);
-        else if (speed < 260) this.hud.show('Нужен разбег!', 'Беги в поле с зажатым Shift', 2.5);
+        if (!this.player.tunnelUnlocked) this.hud.show('Потенциальный барьер', 'Сквозь него не пройти… пока', 2);
+        else if (!this.player.tunneling) this.hud.show('Потенциальный барьер', `Включи квантовый режим: ${this.btn('q')}`, 2.5);
+        else if (speed < 260) this.hud.show('Нужен разбег!', 'Беги в барьер с зажатым Shift', 2.5);
         else this.player.playEmote('confused', 0.8);
       }
     }
@@ -417,7 +417,7 @@ export class Game {
         this.audio.play('unlock'); this.player.playEmote('happy', 1.2);
         if (p.kind === 'tunnel') {
           this.player.tunnelUnlocked = true;
-          this.hud.show('Режим квантового туннелирования!', `${this.btn('q')} — включить/выключить. С разбега (Shift) беги в электрополе: шанс пройти 25%, иначе отскок`, 6);
+          this.hud.show('Режим квантового туннелирования!', `${this.btn('q')} — включить/выключить. С разбега (Shift) беги в потенциальный барьер: шанс пройти 25%, иначе отскок`, 6);
           this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#8FE3FF', 26, 300);
         } else {
           this.weapons.unlock(p.kind); this.weapons.select(p.kind);
