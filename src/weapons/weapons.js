@@ -36,6 +36,7 @@ export class WeaponSystem {
     this.aimLock = 0;
     this.holdOffsetY = 0;
     this.gunAngle = 0;           // smoothed world angle of the gun
+    this.aim = { x: 0, y: 0 };   // last aim point in world space (this player's crosshair)
   }
 
   unlock(kind) {
@@ -79,6 +80,7 @@ export class WeaponSystem {
 
     // aim direction from mouse (world coords)
     const hand = p.handPos();
+    this.aim.x = input.mouseWorldX; this.aim.y = input.mouseWorldY;
     let dx = input.mouseWorldX - hand.x, dy = input.mouseWorldY - hand.y;
     const l = len(dx, dy);
     if (l > 1) { p.aimX = dx / l; p.aimY = dy / l; }
@@ -256,7 +258,7 @@ export class WeaponSystem {
     const s = this.throwSpeed(b);
     // aim assist: hit the point under the cursor when it is within ballistic reach
     const from = { x: b.cx, y: b.cy };
-    const target = { x: this.game.input.mouseWorldX, y: this.game.input.mouseWorldY };
+    const target = { x: this.aim.x, y: this.aim.y };
     const g = this.game.world.gravity * (b.gravityScale ?? 1);
     const dist = Math.hypot(target.x - from.x, target.y - from.y);
     const assisted = dist > 60 ? this.ballisticAim(from, target, s, g) : null;

@@ -17,12 +17,36 @@ export const CAT = {
   mouth: '#B9524F',
   tongue: '#F27A93',
   iris: '#3FA79A',
+  irisLight: '#5FC5B7',
   irisDark: '#276F6A',
   pupil: '#141A1E',
   outline: '#8A4A1E',
   pad: '#F5A9B8',
   white: '#FFFFFF',
 };
+/** Player 2: the very same cat with a black coat (grey chest/muzzle, amber eyes, pink nose & pads). */
+export const CAT_BLACK = {
+  fur: '#3B3A46',
+  furLight: '#4F4E5C',
+  furDark: '#26252F',
+  stripe: '#2C2B36',
+  cream: '#D9D8E3',
+  creamShade: '#BDBCCB',
+  earInner: '#E8A0B0',
+  nose: '#EE93A3',
+  mouth: '#6E3A4C',
+  tongue: '#F27A93',
+  iris: '#F2B640',
+  irisLight: '#FFD86A',
+  irisDark: '#B8811E',
+  pupil: '#141A1E',
+  outline: '#121218',
+  pad: '#E8A0B0',
+  white: '#FFFFFF',
+};
+export const PALETTES = { orange: CAT, black: CAT_BLACK };
+// palette used by the drawing helpers below; drawCat() selects it from the player's `palette` before drawing
+let C = CAT;
 
 const smoothstep = (t) => t * t * (3 - 2 * t);
 const wave = (t, f, p = 0) => Math.sin(t * f * TAU + p);
@@ -196,6 +220,7 @@ export function computePose(p, time) {
  * ctx must already be translated by the camera.
  */
 export function drawCat(ctx, p, time, weaponView) {
+  C = PALETTES[p.palette] || CAT;
   const pose = computePose(p, time);
   const b = p.body;
   const fx = b.cx, fy = b.bottom;
@@ -281,10 +306,10 @@ export function drawCatLocal(ctx, pose, p, time, weaponView, facing = 1) {
   ctx.translate(0, bodyCY);
   ctx.rotate(pose.bodyTilt);
   // fur
-  ctx.fillStyle = CAT.fur;
+  ctx.fillStyle = C.fur;
   ctx.beginPath(); ctx.ellipse(0, 0, bodyRX, bodyRY, 0, 0, TAU); ctx.fill();
   // back stripes
-  ctx.strokeStyle = CAT.stripe; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
     const yy = i * 7;
@@ -293,10 +318,10 @@ export function drawCatLocal(ctx, pose, p, time, weaponView, facing = 1) {
     ctx.stroke();
   }
   // cream belly / chest (front-facing oval)
-  ctx.fillStyle = CAT.cream;
+  ctx.fillStyle = C.cream;
   ctx.beginPath(); ctx.ellipse(5.5, 3, bodyRX * 0.62, bodyRY * 0.82, 0.05, 0, TAU); ctx.fill();
   // soft outline
-  ctx.strokeStyle = CAT.outline; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = C.outline; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
   ctx.beginPath(); ctx.ellipse(0, 0, bodyRX, bodyRY, 0, 0, TAU); ctx.stroke();
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -381,7 +406,7 @@ function drawSmokeBreak(ctx, pose, headCX, headCY, headR, bodyCY, time) {
     ctx.translate(px + Math.cos(ang) * 3, py + Math.sin(ang) * 3);
     ctx.rotate(ang);
     ctx.fillStyle = '#FFFDF6'; roundRect(ctx, 0, -1.4, 10, 2.8, 1.2); ctx.fill();
-    ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.35; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.35; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#D9A066'; ctx.fillRect(0, -1.4, 2, 2.8);
     const glow = puffing ? 1 : 0.55 + 0.25 * Math.sin(time * 6);
     ctx.fillStyle = `rgba(255,${120 + 80 * glow | 0},50,1)`; ctx.beginPath(); ctx.arc(10, 0, 1.7, 0, TAU); ctx.fill();
@@ -440,17 +465,17 @@ function drawTail(ctx, x, y, pose, time) {
     px += Math.cos(ang) * segLen; py += Math.sin(ang) * segLen;
   }
   const widths = pts.map((_, i) => 5 + 2.5 * Math.sin((i / segs) * Math.PI) + (i / segs) * 1.2);
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.3; ctx.lineCap = 'round';
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.3; ctx.lineCap = 'round';
   for (let i = 0; i < segs; i++) { ctx.lineWidth = widths[i] * 2 + 2.4; ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[i + 1][0], pts[i + 1][1]); ctx.stroke(); }
   ctx.globalAlpha = 1;
   for (let i = 0; i < segs; i++) {
-    ctx.strokeStyle = i % 3 === 1 ? CAT.stripe : CAT.fur;
-    if (i >= segs - 1) ctx.strokeStyle = CAT.cream;
+    ctx.strokeStyle = i % 3 === 1 ? C.stripe : C.fur;
+    if (i >= segs - 1) ctx.strokeStyle = C.cream;
     ctx.lineWidth = widths[i] * 2;
     ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[i + 1][0], pts[i + 1][1]); ctx.stroke();
   }
   const tip = pts[segs];
-  ctx.fillStyle = CAT.cream; ctx.beginPath(); ctx.arc(tip[0], tip[1], widths[segs] * 0.95, 0, TAU); ctx.fill();
+  ctx.fillStyle = C.cream; ctx.beginPath(); ctx.arc(tip[0], tip[1], widths[segs] * 0.95, 0, TAU); ctx.fill();
 }
 
 function drawLeg(ctx, x, y, len, swing, pose, far) {
@@ -461,18 +486,18 @@ function drawLeg(ctx, x, y, len, swing, pose, far) {
   ctx.translate(x + (pose.legSpread ? (far ? -3 : 3) : 0), y);   // spread: feet planted wider apart
   ctx.rotate(s * 0.9 + (pose.legSpread ? (far ? 0.12 : -0.12) : 0));
   const l = len - lift + (pose.legSpread ? 1 : 0);
-  ctx.fillStyle = far ? CAT.furDark : CAT.fur;
-  ctx.strokeStyle = CAT.outline; ctx.lineWidth = 1.4; ctx.globalAlpha = 1;
+  ctx.fillStyle = far ? C.furDark : C.fur;
+  ctx.strokeStyle = C.outline; ctx.lineWidth = 1.4; ctx.globalAlpha = 1;
   roundRect(ctx, -6.5, -3, 13, l + 3, 6); ctx.fill();
   ctx.globalAlpha = 0.3; ctx.stroke(); ctx.globalAlpha = 1;
   // stripe
-  ctx.strokeStyle = CAT.stripe; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(-4, l * 0.35); ctx.lineTo(4, l * 0.45); ctx.stroke();
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(-4, l * 0.35); ctx.lineTo(4, l * 0.45); ctx.stroke();
   // sock (foot)
-  ctx.fillStyle = far ? CAT.creamShade : CAT.white;
+  ctx.fillStyle = far ? C.creamShade : C.white;
   ctx.beginPath(); ctx.ellipse(1.5, l - 1, 8.5, 5.2, 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
   // toe lines
-  ctx.strokeStyle = CAT.creamShade; ctx.lineWidth = 1.2;
+  ctx.strokeStyle = C.creamShade; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(4, l + 1); ctx.lineTo(4, l + 3.5); ctx.moveTo(7, l + 0.5); ctx.lineTo(7.5, l + 3); ctx.stroke();
   ctx.restore();
 }
@@ -486,10 +511,10 @@ function drawArm(ctx, x, y, swing, pose, far, side) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(ang);
-  ctx.fillStyle = far ? CAT.furDark : CAT.fur;
+  ctx.fillStyle = far ? C.furDark : C.fur;
   roundRect(ctx, -4.5, -2, 9, len, 4.5); ctx.fill();
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
-  ctx.strokeStyle = CAT.stripe; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-3, len * 0.45); ctx.lineTo(3, len * 0.5); ctx.stroke();
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-3, len * 0.45); ctx.lineTo(3, len * 0.5); ctx.stroke();
   drawPaw(ctx, 0, len - 1, far, side ? 1 : 0.5);
   ctx.restore();
 }
@@ -501,20 +526,20 @@ function drawArmTo(ctx, sx, sy, tx, ty, far) {
   ctx.save();
   ctx.translate(sx, sy);
   ctx.rotate(ang);
-  ctx.fillStyle = far ? CAT.furDark : CAT.fur;
+  ctx.fillStyle = far ? C.furDark : C.fur;
   roundRect(ctx, -4.5, -2, 9, len, 4.5); ctx.fill();
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
-  ctx.strokeStyle = CAT.stripe; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-3, len * 0.45); ctx.lineTo(3, len * 0.5); ctx.stroke();
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.3; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-3, len * 0.45); ctx.lineTo(3, len * 0.5); ctx.stroke();
   drawPaw(ctx, 0, len - 1, far, 0.4);
   ctx.restore();
 }
 
 function drawPaw(ctx, x, y, far, padAlpha = 1) {
-  ctx.fillStyle = far ? CAT.creamShade : CAT.white;
+  ctx.fillStyle = far ? C.creamShade : C.white;
   ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill();
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = 1;
   if (padAlpha > 0) {
-    ctx.globalAlpha = padAlpha; ctx.fillStyle = CAT.pad;
+    ctx.globalAlpha = padAlpha; ctx.fillStyle = C.pad;
     ctx.beginPath(); ctx.ellipse(x, y + 1.5, 2.8, 2.2, 0, 0, TAU); ctx.fill();
     for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(x + i * 2.6, y - 2.2 + Math.abs(i) * 0.6, 1.1, 0, TAU); ctx.fill(); }
     ctx.globalAlpha = 1;
@@ -528,14 +553,14 @@ function drawHead(ctx, r, pose, p, time) {
   drawEar(ctx, r * 0.58, -r * 0.66, 0.45 - earFlick * 0.5, r);
 
   // head shape: big round, slightly wider than tall, with soft cheeks
-  ctx.fillStyle = CAT.fur;
+  ctx.fillStyle = C.fur;
   ctx.beginPath(); ctx.ellipse(0, 0, r * 1.06, r, 0, 0, TAU); ctx.fill();
   // cheeks lighter
-  ctx.fillStyle = CAT.furLight;
+  ctx.fillStyle = C.furLight;
   ctx.beginPath(); ctx.ellipse(-r * 0.45, r * 0.35, r * 0.42, r * 0.36, 0, 0, TAU); ctx.fill();
   ctx.beginPath(); ctx.ellipse(r * 0.55, r * 0.35, r * 0.42, r * 0.36, 0, 0, TAU); ctx.fill();
   // forehead "M" stripes
-  ctx.strokeStyle = CAT.stripe; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
     ctx.moveTo(i * 5.5 + 1, -r * 0.95 + Math.abs(i) * 1.5);
@@ -547,13 +572,13 @@ function drawHead(ctx, r, pose, p, time) {
   ctx.beginPath(); ctx.moveTo(-r * 0.98, -r * 0.05); ctx.lineTo(-r * 0.7, 0); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(-r * 0.96, r * 0.25); ctx.lineTo(-r * 0.7, r * 0.22); ctx.stroke();
   // soft outline
-  ctx.strokeStyle = CAT.outline; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = C.outline; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
   ctx.beginPath(); ctx.ellipse(0, 0, r * 1.06, r, 0, 0, TAU); ctx.stroke();
   ctx.globalAlpha = 1;
 
   // muzzle (cream) — offset forward for the 3/4 view
   const mx = r * 0.34, my = r * 0.32;
-  ctx.fillStyle = CAT.cream;
+  ctx.fillStyle = C.cream;
   ctx.beginPath(); ctx.ellipse(mx, my, r * 0.5, r * 0.4, 0, 0, TAU); ctx.fill();
 
   // eyes: huge, teal, near eye slightly larger
@@ -561,13 +586,13 @@ function drawHead(ctx, r, pose, p, time) {
   drawEye(ctx, -r * 0.2, -r * 0.08, r * 0.24, eo, pose.pupilX, pose.pupilY, false);
   drawEye(ctx, r * 0.5, -r * 0.1, r * 0.27, eo, pose.pupilX, pose.pupilY, true);
   // brows (short dark strokes above the eyes)
-  ctx.strokeStyle = CAT.furDark; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.strokeStyle = C.furDark; ctx.lineWidth = 2; ctx.lineCap = 'round';
   const br = pose.browRaise * 2;
   ctx.beginPath(); ctx.moveTo(-r * 0.36, -r * 0.44 - br); ctx.lineTo(-r * 0.12, -r * 0.5 - br); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(r * 0.35, -r * 0.52 - br); ctx.lineTo(r * 0.62, -r * 0.46 - br); ctx.stroke();
 
   // nose
-  ctx.fillStyle = CAT.nose;
+  ctx.fillStyle = C.nose;
   ctx.beginPath();
   ctx.moveTo(mx + r * 0.05 - 3.4, my - r * 0.16);
   ctx.lineTo(mx + r * 0.05 + 3.4, my - r * 0.16);
@@ -578,17 +603,17 @@ function drawHead(ctx, r, pose, p, time) {
 
   // mouth
   const mouthX = mx + r * 0.05, mouthY = my - r * 0.16 + 4;
-  ctx.strokeStyle = CAT.mouth; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  ctx.strokeStyle = C.mouth; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
   switch (pose.mouth) {
     case 'open': case 'yawn': {
       const h = pose.mouth === 'yawn' ? 5 : 4.2;
-      ctx.fillStyle = CAT.mouth;
+      ctx.fillStyle = C.mouth;
       ctx.beginPath(); ctx.moveTo(mouthX - 4, mouthY + 1); ctx.quadraticCurveTo(mouthX, mouthY + h * 2.2, mouthX + 4.5, mouthY + 1); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = CAT.tongue;
+      ctx.fillStyle = C.tongue;
       ctx.beginPath(); ctx.ellipse(mouthX + 0.5, mouthY + h * 1.1, 2.4, 1.8, 0, 0, TAU); ctx.fill();
       break;
     }
-    case 'o': ctx.fillStyle = CAT.mouth; ctx.beginPath(); ctx.ellipse(mouthX, mouthY + 3, 2.2, 2.8, 0, 0, TAU); ctx.fill(); break;
+    case 'o': ctx.fillStyle = C.mouth; ctx.beginPath(); ctx.ellipse(mouthX, mouthY + 3, 2.2, 2.8, 0, 0, TAU); ctx.fill(); break;
     case 'grit': ctx.beginPath(); ctx.moveTo(mouthX - 4, mouthY + 3); ctx.lineTo(mouthX + 4, mouthY + 3); ctx.stroke(); break;
     case 'small': ctx.beginPath(); ctx.moveTo(mouthX, mouthY); ctx.lineTo(mouthX, mouthY + 2); ctx.stroke(); break;
     default: // smile ("w" shape)
@@ -614,10 +639,10 @@ function drawEar(ctx, x, y, rot, r) {
   ctx.translate(x, y);
   ctx.rotate(rot);
   const w = r * 0.6, h = r * 0.78;
-  ctx.fillStyle = CAT.fur;
+  ctx.fillStyle = C.fur;
   ctx.beginPath(); ctx.moveTo(-w / 2, h * 0.35); ctx.quadraticCurveTo(-w * 0.2, -h * 0.9, 0.5, -h); ctx.quadraticCurveTo(w * 0.3, -h * 0.8, w / 2, h * 0.35); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
-  ctx.fillStyle = CAT.earInner;
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.fillStyle = C.earInner;
   ctx.beginPath(); ctx.moveTo(-w * 0.28, h * 0.3); ctx.quadraticCurveTo(-w * 0.1, -h * 0.5, 0.3, -h * 0.62); ctx.quadraticCurveTo(w * 0.2, -h * 0.45, w * 0.28, h * 0.3); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
@@ -628,24 +653,24 @@ function drawEye(ctx, x, y, r, open, px, py, near) {
   // eyelid clipping (blink)
   ctx.beginPath(); ctx.ellipse(0, 0, r, r * Math.min(1.1, open), 0, 0, TAU); ctx.clip();
   // white
-  ctx.fillStyle = CAT.white;
+  ctx.fillStyle = C.white;
   ctx.beginPath(); ctx.ellipse(0, 0, r, r, 0, 0, TAU); ctx.fill();
   // iris
   const ix = clamp(px, -r * 0.3, r * 0.3) + (near ? 0.5 : 1.2), iy = clamp(py, -r * 0.3, r * 0.3) + 0.5;
   const g = ctx.createRadialGradient(ix, iy, r * 0.15, ix, iy, r * 0.8);
-  g.addColorStop(0, '#5FC5B7'); g.addColorStop(0.7, CAT.iris); g.addColorStop(1, CAT.irisDark);
+  g.addColorStop(0, C.irisLight); g.addColorStop(0.7, C.iris); g.addColorStop(1, C.irisDark);
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(ix, iy, r * 0.78, 0, TAU); ctx.fill();
   // pupil
-  ctx.fillStyle = CAT.pupil;
+  ctx.fillStyle = C.pupil;
   ctx.beginPath(); ctx.ellipse(ix, iy, r * 0.42, r * 0.5, 0, 0, TAU); ctx.fill();
   // highlights
-  ctx.fillStyle = CAT.white;
+  ctx.fillStyle = C.white;
   ctx.beginPath(); ctx.arc(ix - r * 0.28, iy - r * 0.32, r * 0.24, 0, TAU); ctx.fill();
   ctx.beginPath(); ctx.arc(ix + r * 0.3, iy + r * 0.25, r * 0.11, 0, TAU); ctx.fill();
   ctx.restore();
   // lid line
-  ctx.strokeStyle = CAT.outline; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.2;
+  ctx.strokeStyle = C.outline; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.ellipse(x, y, r, r * Math.min(1.1, open), 0, Math.PI, TAU); ctx.stroke();
   ctx.globalAlpha = 1;
 }

@@ -413,5 +413,68 @@ const R = [
   ok = true; try { d.step(30); } catch (e) { ok = false; console.log(e); } check(`world ${lastWorld} summary renders`, ok);
 }
 
+// ------------------------------------------------------------ multiplayer session (two cats, one world)
+{
+  console.log('Multiplayer session (local, no network)');
+  const { game, canvas } = await createGame(); const d = new Driver(game, canvas);
+  d.startLevel(0); d.step(20);
+  check('a session starts with one cat (player 1, orange)', game.playerCount() === 1 && game.player.palette === 'orange' && game.players.length === 1);
+  const seq = game.levelSeq, propsBefore = game.world.bodies.filter((b) => b.kind !== 'cat').length;
+  game.addPlayer(1); d.step(20);
+  const p2 = game.slots[1].player, p1 = game.player;
+  check('player 2 joins the EXISTING world (no reload) as a black cat', game.levelSeq === seq && p2 && p2.palette === 'black' && game.world.bodies.filter((b) => b.kind === 'cat').length === 2 && game.world.bodies.filter((b) => b.kind !== 'cat').length >= propsBefore - 4, `props ${propsBefore}→${game.world.bodies.length}`);
+  check('player 2 spawns next to player 1, standing on the ground', Math.abs(p2.body.x - p1.body.x) < 4 * TILE && p2.onGround && !game.map.rectHitsSolid(p2.body.x + 1, p2.body.y + 1, p2.body.w - 2, p2.body.h - 2), `dx=${(p2.body.x - p1.body.x) / TILE}`);
+  check('local player is still player 1 (camera/HUD)', game.player === p1 && game.localPlayerSlot.index === 0);
+  // p2 has its own controls
+  const x0 = p2.body.x;
+  game.slots[1].input = { ...game.slots[1].input, right: true, run: true }; d.step(45); game.slots[1].input = { ...game.slots[1].input, right: false, run: false }; d.step(10);
+  check('player 2 moves with its own input while player 1 stands still', p2.body.x > x0 + 2 * TILE && Math.abs(p1.body.vx) < 1, `dx=${(p2.body.x - x0) / TILE}`);
+  // shared unlocks: a pickup taken by p2 unlocks for both
+  const pick = game.pickups.find((p) => !p.taken);
+  if (pick) { p2.body.x = pick.x; p2.body.y = pick.y; p2.body.vx = 0; p2.body.vy = 0; d.step(5); check('a pickup taken by player 2 unlocks the weapon for both cats', pick.taken && game.slots[0].weapons.available[pick.kind] && game.slots[1].weapons.available[pick.kind]); }
+  // exit rule: with two players both must stand on it
+  const e = game.exit; const put = (b, dx) => { b.x = e.x + dx; b.y = e.y + e.h - 54 - 2; b.vx = 0; b.vy = 0; };
+  put(p1.body, 4); d.step(60);
+  check('with two players one cat at the exit is not enough', game.levelDoneTimer < 0 && game.waitingAtExit());
+  put(p2.body, 30); d.step(30);
+  check('both cats at the exit → level complete', game.levelDoneTimer >= 0);
+  // render with two cats
+  let ok = true; try { d.step(30); d.shot('mp_two_cats'); } catch (err) { ok = false; console.log(err); } check('two cats render without errors', ok);
+  // disconnect: player 1 continues, no reload
+  game.removePlayer(1); d.step(5);
+  check('player 2 leaves → removed from the world, level not restarted', game.playerCount() === 1 && game.world.bodies.filter((b) => b.kind === 'cat').length === 1 && game.levelSeq === seq && !game.slots[1].connected);
+  // rejoin
+  game.addPlayer(1); d.step(5);
+  check('player 2 can rejoin the same world', game.playerCount() === 2 && game.slots[1].player.palette === 'black' && game.levelSeq === seq);
+  // restart keeps both cats
+  game.restartLevel(); d.step(5);
+  check('a restart spawns both connected cats at the start', game.playerCount() === 2 && game.levelSeq === seq + 1);
+  // with one player the exit rule is the old one
+  game.removePlayer(1); put(game.player.body, 4); d.step(30);
+  check('back to one player → the old single-cat exit rule applies', game.levelDoneTimer >= 0);
+}
+{
+  console.log('Multiplayer: shared puzzles');
+  const { game, canvas } = await createGame(); const d = new Driver(game, canvas);
+  const { LEVELS } = await import('../src/levels/index.js');
+  const { Lever, PressurePlate } = await import('../src/puzzles/puzzles.js');
+  d.startLevel(0); d.step(5); game.addPlayer(1); d.step(5);
+  const p1 = game.slots[0].player, p2 = game.slots[1].player;
+  // a lever pressed by player 2 (E from ITS input) toggles the shared channel; player 1's E far away does nothing
+  const lever = new Lever(p2.body.x - 2, p2.body.bottom - 24, 'mpLever'); game.puzzles.push(lever);
+  p1.body.x = p2.body.x + 12 * TILE; p1.body.vx = 0;
+  d.tap('KeyE'); d.step(3);
+  check('player 1 pressing E far from the lever does nothing', !lever.on);
+  game.slots[1].input = { ...game.slots[1].input, interactPressed: true }; d.step(1); game.slots[1].input.interactPressed = false; d.step(3);
+  check('player 2 pressing E toggles the lever (shared channel on)', lever.on && game.channels.get('mpLever'));
+  // a plate held by player 2 while player 1 is elsewhere
+  const plate = new PressurePlate(Math.floor(p2.body.x / TILE) * TILE, p2.body.bottom - 8, 'mpPlate'); game.puzzles.push(plate);
+  d.step(10);
+  check('player 2 standing on a plate keeps the shared channel on', game.channels.get('mpPlate'));
+  game.removePlayer(1); d.step(10);
+  check('when player 2 leaves, the plate releases', !game.channels.get('mpPlate'));
+  void LEVELS;
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

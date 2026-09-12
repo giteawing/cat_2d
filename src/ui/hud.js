@@ -18,6 +18,7 @@ export class HUD {
   draw(ctx, game, w, h) {
     const p = game.player;
     const ws = game.weapons;
+    if (!p || !ws) return;
     ctx.save();
     ctx.textBaseline = 'middle';
     // ---- top-left panel: gifts ----
@@ -76,7 +77,7 @@ export class HUD {
     ctx.font = '11px "Trebuchet MS", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.fillText(`Мир ${game.level.world} · Уровень ${game.level.number || game.level.index + 1}   ·   Esc — меню   R — рестарт`, w - 16, 40);
 
-    // ---- crosshair ----
+    // ---- crosshair (local player's cursor) ----
     const mx = game.input.mouseX, my = game.input.mouseY;
     if (ws.current) {
       ctx.lineWidth = 2;
@@ -93,8 +94,18 @@ export class HUD {
       if (hover) { ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD08A'; ctx.fillText(game.btn('lmb'), mx, my - 16); }
     }
 
+    // ---- multiplayer: partner status (top-right, under the level name) ----
+    if (game.slots && game.slots.length > 1) {
+      const partner = game.slots.find((s) => s !== game.localPlayerSlot);
+      if (partner && (partner.connected || game.net)) {
+        const on = partner.active;
+        ctx.font = '11px "Trebuchet MS", sans-serif'; ctx.textAlign = 'right';
+        ctx.fillStyle = on ? '#B8F0C0' : 'rgba(255,255,255,0.55)';
+        ctx.fillText(on ? `● ${partner.name} (${partner.palette === 'black' ? 'чёрный кот' : 'рыжий кот'}) в игре` : `○ ${partner.name}: ожидание…`, w - 16, 58);
+      }
+    }
     // ---- bottom hint ----
-    const hint = game.hintText || ws.hint;
+    const hint = game.hintText || (game.waitingAtExit && game.waitingAtExit() ? 'Выход откроется, когда на нём будут стоять оба кота' : '') || ws.hint;
     if (hint) {
       ctx.font = '13px "Trebuchet MS", sans-serif'; ctx.textAlign = 'center';
       // word-wrap long sign texts so they never run off the screen

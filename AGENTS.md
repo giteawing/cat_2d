@@ -11,10 +11,12 @@ Cat Portal Adventure 2D — пазл-платформер на чистом HTML
 ## 1. Быстрый старт
 
 ```bash
-npm start                 # статический сервер на 0.0.0.0:8080 → открыть в браузере
+npm run server            # ИГРОВОЙ СЕРВЕР (кооп 1–2 игрока) на 0.0.0.0:8080: статика + WebSocket /ws → открыть в браузере
+npm start                 # только статика (офлайн, один игрок), без сервера сессии
 cd tools && npm install   # один раз: @napi-rs/canvas для headless-тестов (node_modules могут пропасть — переустановить)
-cd .. && npm test         # ~150 быстрых проверок (физика, порталы, оружие, барьеры, лазеры, преломление, sanity уровней)
-npm run walk              # полные прохождения всех 12 уровней ботом (~11 минут)
+cd .. && npm test         # ~190 быстрых проверок (физика, порталы, оружие, барьеры, лазеры, вода, мультиплеер, sanity уровней)
+npm run test:net          # сквозной сетевой тест: реальный сервер + два клиента (~15 с)
+npm run walk              # полные прохождения всех 13 уровней ботом (~25 минут)
 node tools/walkthroughs/level12.mjs   # прохождение одного уровня (idx = номер файла)
 npm run shots             # скриншоты всех уровней в tools/out/ (в .gitignore)
 ```
@@ -31,14 +33,22 @@ npm run shots             # скриншоты всех уровней в tools/
 ## 2. Структура проекта
 
 ```
-index.html, src/main.js          точка входа: создаёт Game, game loop через requestAnimationFrame
+index.html, src/main.js          точка входа: создаёт Game, подключает NetClient (если страница отдана сервером сессии
+                                 или задан ?ws=), game loop через requestAnimationFrame; ?offline — без сети
 src/core/
-  game.js        ГЛАВНЫЙ класс Game: состояния title/select/playing/paused/complete/worldDone, loadLevel(),
-                 update*/render* для каждого состояния, HUD-подсказки (hud.show), звуковые события (sfx), onField,
-                 подбор/переключение оружия, стартовый экран (renderTitle), выбор уровня (renderSelect)
+  game.js        ГЛАВНЫЙ класс Game = ИГРОВАЯ СЕССИЯ: состояния title/select/playing/paused/complete/worldDone,
+                 loadLevel(), слоты игроков `slots[0..1]` (см. playerSlot.js) + addPlayer/removePlayer/spawnSlot/
+                 safeSpotNear, геттеры `player`/`weapons`/`frameInput` = ЛОКАЛЬНЫЙ игрок (камера/HUD), `players` =
+                 все коты; update*/render* для каждого состояния, HUD-подсказки (hud.show), звуковые события (sfx),
+                 onField, подбор оружия (takePickup — разблокировка общая на сессию), выход allAtExit (все
+                 подключённые коты), стартовый экран (renderTitle), выбор уровня (renderSelect). `headless` —
+                 серверный режим без рендера; `net` — NetClient (меню/рестарт уходят на сервер через net.ui)
+  playerSlot.js  PlayerSlot: index, palette ('orange' | 'black'), connected/local, player, weapons, input (снимок
+                 ввода кадра), frameInput (защёлка одноразовых нажатий для пазлов). blankInput/packInput/mergeInput —
+                 формат ввода для сети
   camera.js      камера: плавное слежение, look-ahead, clamp к уровню, peek W/S. НЕ менять без нужды — тесты
                  (aimClick) зависят от размера вида 24×13.5 тайла
-  input.js       клавиатура/мышь → снимок ввода на кадр (frameInput: interactPressed, jumpPressed …)
+  input.js       клавиатура/мышь/геймпад → снимок ввода на кадр (тот же формат, что летит по сети от клиента)
   save.js        localStorage: пройденные уровни, подарки, секреты, настройки
   util.js        TILE=32, clamp/lerp/approach и т.п.
 src/physics/
@@ -55,12 +65,27 @@ src/weapons/
   weapons.js     WeaponSystem: 1 = Gravity Gun (захват/переноска/бросок, hoverBody), 2 = Portal Gun (ЛКМ синий,
                  ПКМ оранжевый), анимация смены (swapT), отдача
   gunSprites.js  векторные модели пушек В ЛАПАХ кота + иконки HUD (GUN_COLORS)
+src/net/
+  protocol.js    формат сообщений + encodeState(game) (авторитетный снимок мира) и applyState(game, snap)
+                 (клиент: загрузка уровня по level/seq, add/removePlayer, коррекция котов/тел/порталов/пазлов/каналов/
+                 подарков/пикапов/разбитых тайлов). Тела адресуются по `body.netId` (коты: 1000000+slot)
+  client.js      NetClient: WebSocket → 'hello' → 'welcome' {slot}; каждый кадр шлёт packInput, применяет снимки
+                 (beforeFrame/afterFrame из Game.frame), при обрыве связи продолжает офлайн
+server/
+  index.mjs      `npm run server [port] [startLevel]`: статика + /health + WebSocket /ws; ОДНА сессия на процесс
+  session.mjs    Session: headless Game, слоты по подключениям (первый = игрок 1 рыжий, второй = игрок 2 чёрный,
+                 третий получает 'full'), тик 60 Гц через game.frame (тот же FIXED_DT), снимки 30 Гц (спящие тела —
+                 раз в секунду), ui-действия (restart/next/menu/level), пустая сессия сбрасывается через минуту
+  headless.mjs   шимы window/document/localStorage для запуска Game в Node без канваса
+  wsmini.mjs     минимальный RFC6455 WebSocket-сервер без зависимостей (текстовые кадры, ping/pong, close)
 src/characters/cat/
-  player.js      Player: управление (ходьба/бег/прыжок/присед/лестница/ползание), эмоции (playEmote),
-                 квантовый режим (toggleTunneling), позиция лапы (handPos)
-  catSprite.js   ВЕСЬ ВНЕШНИЙ ВИД КОТА: палитра CAT{}, computePose (все анимации), drawCat/drawCatLocal,
+  player.js      Player(x, y, {palette, slot}): управление (ходьба/бег/прыжок/присед/лестница/ползание), эмоции
+                 (playEmote), квантовый режим (toggleTunneling), позиция лапы (handPos)
+  catSprite.js   ВЕСЬ ВНЕШНИЙ ВИД КОТА: палитры CAT (рыжий, игрок 1) и CAT_BLACK (чёрный, игрок 2) → PALETTES,
+                 drawCat выбирает по `p.palette`; computePose (все анимации), drawCat/drawCatLocal,
                  голова/уши/глаза/хвост/лапы, «квантовый» контур, искры радости
-src/puzzles/puzzles.js   переиспользуемые компоненты: Channels, PressurePlate, Button, Lever, Door,
+src/puzzles/puzzles.js   переиспользуемые компоненты (все смотрят на ВСЕХ котов через playerSlots(game); E берётся
+                 из frameInput того слота, который нажал): Channels, PressurePlate, Button, Lever, Door,
                  MovingPlatform, Trigger, Fan, FieldGate (отключаемый барьер), Laser, LaserReceiver, Medium
                  (оптическая среда — преломление), Water (бак с водой: плавучесть, плавание, наполнение). Связь через именованные каналы: 'a', 'a&b', 'a|b', '!a'
 src/gifts/gift.js        подарки (normal/big/rare/secret/bonus), анимация подбора
@@ -78,7 +103,8 @@ src/levels/
   world01/levelNN.js, world02/levelNN.js — сами уровни (см. §4)
 tools/
   harness.mjs    headless-игра на @napi-rs/canvas: createGame(), Driver (key/tap/hold/mouse/aimClick/step/shot)
-  test.mjs       unit + интеграционные проверки (`npm test`)
+  test.mjs       unit + интеграционные проверки (`npm test`), в т.ч. блок «Multiplayer session»
+  nettest.mjs    сквозной сетевой тест (`npm run test:net`): сервер + 2 клиента NetClient, вход/выход/реконнект/выход из уровня
   walkthroughs/  lib.mjs (begin(levelIdx) → helpers walkTo/grab/dropAt/portal/…) и levelNN.mjs — бот проходит
                  уровень целиком и собирает все подарки; all.mjs запускает все
   serve.mjs      статический сервер; catsheet.mjs — лист анимаций кота; smoke.mjs — дымовой тест
@@ -91,7 +117,7 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
 
 | Что нужно | Где |
 |---|---|
-| **Внешний вид кота** (цвета, пропорции, глаза, хвост) | `src/characters/cat/catSprite.js`: палитра `CAT` (строка ~8), геометрия в `drawCatLocal`/`drawHead`/`drawTail`. Позы/анимации — `computePose`. Проверить: `node tools/catsheet.mjs` → `tools/out/catsheet.png` |
+| **Внешний вид кота** (цвета, пропорции, глаза, хвост) | `src/characters/cat/catSprite.js`: палитры `CAT` (рыжий) / `CAT_BLACK` (чёрный, игрок 2), геометрия в `drawCatLocal`/`drawHead`/`drawTail`. Позы/анимации — `computePose`. Проверить: `node tools/catsheet.mjs` → `tools/out/catsheet.png` |
 | **Пушки в лапах** | `src/weapons/gunSprites.js` (`drawGun`), цвета `GUN_COLORS` |
 | **Тексты подсказок на уровне** (таблички «?») | в `setup()` уровня: `k.sign(tx, ty, 'текст')`, заголовок комнаты — `k.message(tx, ty, w, h, 'Заголовок', 'подзаголовок')` |
 | **Всплывающие подсказки HUD** (оружие, барьеры, туннелирование) | `src/core/game.js` — поиск по `hud.show(` |
@@ -103,6 +129,8 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
 | **Тема оформления** | `THEMES` в `src/render/tileRenderer.js`, поле `theme` уровня |
 | **Звуки** | `src/audio/audio.js` → `play()`; вызывать через `game.sfx('name')` |
 | **Управление** | `src/core/input.js` (коды клавиш) + `src/characters/cat/player.js` |
+| **Сетевой протокол / что синхронизируется** | `src/net/protocol.js` (`PUZZLE_KEYS`, `PLAYER_KEYS`, encode/apply); новое поле пазла с состоянием — добавить в `PUZZLE_KEYS` |
+| **Правила «на двоих»** (выход, спавн второго, общие разблокировки) | `src/core/game.js`: `allAtExit`, `safeSpotNear`, `addPlayer`, `takePickup` |
 
 Терминология в игровом тексте: тайл `~` называется **«потенциальный барьер»** (не «электрополе»). В коде идентификаторы
 остались `EFIELD`/`isField`/`FieldGate`/`onField` — это нормально.
@@ -120,6 +148,15 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
   «swimming»), анимации swim/float, брызги (`world.onSplash`), вентиль наполняет бак и поднимает всё плавучее. Вода —
   ещё и оптическая среда (n = 1.33). Планируемые уровни 3-2…3-4: шлюзы (два бака и переливы), подводные порталы
   (портал под водой выбрасывает струю), тонущие/всплывающие платформы-плоты с грузом.
+- **Мультиплеер (кооп 1–2 игрока, одна сессия, один World)** — архитектура: Game (сессия) → World (общий) →
+  slots[0] = Игрок 1 (рыжий кот + свой WeaponSystem) и slots[1] = Игрок 2 (чёрный кот + свой WeaponSystem, опционально).
+  Отдельного одиночного режима НЕТ: один игрок — это сессия с одним занятым слотом. Второй подключается в ТЕКУЩИЙ
+  уровень (`addPlayer` → `safeSpotNear` рядом с первым), ничего не перезагружается; отключение — `removePlayer`
+  (кот убирается, плита под ним отпускается, уровень продолжается); повторное подключение получает слот 1 снова.
+  Выход: `allAtExit()` — стоят ВСЕ подключённые коты (при одном — прежнее правило), правило переключается само.
+  Подобранное оружие/туннелирование разблокируется обоим. Сервер авторитетен: клиент шлёт ввод, симулирует то же
+  самое между снимками и мягко корректируется (`applyState`); респаун/выход онлайн решает только сервер (`!this.net`).
+  Порталов по-прежнему одна пара на мир (общая): любой кот перекрашивает.
 - Правила механик, которые нужно помнить при дизайне уровней:
   - порталы ставятся только на кирпич `#`; стекло `G` блокирует выстрел, решётка `|`, one-way `=` и барьер `~` — нет.
   - лучи и выстрелы порталов проходят сквозь барьер, предметы и кот — нет (кот в квантовом режиме с разбега: 25 %).
@@ -137,7 +174,7 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
 1. `npm test` — обязательно после любой правки физики/пазлов/уровней (падает при первом сломанном уровне sanity).
 2. Прохождение затронутого уровня: `timeout 600 node tools/walkthroughs/levelNN.mjs > /tmp/l.log 2>&1; grep -vE "^\s+at " /tmp/l.log`.
    Ожидаемо: `RESULT level N: state=complete gifts=5/5 fails=0 → PASS`.
-3. Перед пушем крупных изменений — `npm run walk` (все 13).
+3. Перед пушем крупных изменений — `npm run walk` (все 13). После правок сети/слотов — `npm run test:net`.
 4. Визуальная проверка — `Driver.shot('name')` → `tools/out/name.png`, затем просмотреть картинку.
 5. Отладка сцен — маленький скрипт в /tmp, который телепортирует кота: `b.x = tx*32-15; b.y = ty*32-54` (ty — ряд пола).
    Точка спавна должна быть в пустых тайлах.
@@ -151,13 +188,16 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
 ## 6. Текущее состояние работ
 
 Сделано: ядро, оба оружия, порталы, 13 уровней (мир 1 и мир 2 полностью, мир 3 начат), сохранения, HUD, звук,
-тесты (171) и прохождения ботом всех уровней, преломление света в 2-4, вода/плавание/плавучесть и уровень 3-1, AGENTS.md.
+тесты (188 + 22 сетевых) и прохождения ботом всех уровней, преломление света в 2-4, вода/плавание/плавучесть и уровень 3-1,
+**кооператив на двоих** (серверная авторитетная сессия по WebSocket, `npm run server`), AGENTS.md.
 
 Возможные следующие шаги (не начаты):
 - Мир 3: уровни 3-2…3-4 (см. §4), музыка темы `aquarium` уже есть в audio.js, фон — в tileRenderer.js.
 - Меню настроек (громкость, переназначение клавиш) — сейчас только автосохранение прогресса.
 - Полная поддержка геймпада в меню (базовая поддержка стиков/кнопок и вибрации уже есть в input.js).
 - Локализация (весь текст сейчас захардкожен по-русски в уровнях/HUD).
+- Сеть: интерполяция снимков (сейчас 30 Гц + локальная симуляция и мягкая коррекция), несколько сессий/комнат на
+  одном сервере (сейчас одна), бинарный формат снимков (сейчас JSON ≈ 4 КБ, спящие тела раз в секунду).
 
 ---
 
@@ -172,6 +212,10 @@ assets/reference/CAT_REFERENCE.md   словесное описание рефе
 - Наклонные лучи (`Medium`, угловые лазеры) пересекают порталы «в лоб» с округлением направления — при нужде
   наклонного луча сквозь портал проверить визуально.
 - Нет автотестов на звук/HUD-верстку; проверяется скриншотами.
+- Онлайн: прогресс (подарки/пройденные уровни) сохраняется в localStorage КАЖДОГО клиента отдельно; меню выбора уровня
+  общее — выбор любого игрока загружает уровень для обоих. Пауза (Esc) локальная: мир под ней продолжает идти.
+- Онлайн ввод одноразовых нажатий (E, прыжок, выстрел) уходит на сервер даже если локальная симуляция уже «потратила»
+  их (NetClient.edges) — иначе локальный пазл съедал бы нажатие до отправки.
 
 ---
 

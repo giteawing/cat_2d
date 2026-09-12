@@ -20,6 +20,17 @@ export class Channels {
   }
 }
 
+/**
+ * Players of a game (multiplayer: 1–2 cats). Each entry: { player, frameInput } — puzzles look at every cat and take
+ * one-shot presses from the slot that pressed them. Works with plain test games that only have `player`/`frameInput`.
+ */
+export function playerSlots(game) {
+  if (game.activeSlots) return game.activeSlots();
+  return game.player ? [{ player: game.player, frameInput: game.frameInput || {} }] : [];
+}
+/** Is the cat's body near an E-interactable at (x,y,w,h)? */
+function nearBox(p, x, y, w, h) { return p.x < x + w + 28 && p.right > x - 28 && p.y < y + h + 40 && p.bottom > y - 64; }
+
 /** Floor plate pressed by weight (cat or objects) — stays active while something stands on it. */
 export class PressurePlate {
   constructor(x, y, channel, opts = {}) {
@@ -68,11 +79,12 @@ export class Button {
     this.lastHitter = null; this.hitterClear = 0;
   }
   update(dt, game) {
-    const p = game.player.body;
-    const near = p.x < this.x + this.w + 28 && p.right > this.x - 28 && p.y < this.y + this.h + 40 && p.bottom > this.y - 64;
-    game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E' });
     let hit = false;
-    if (near && game.frameInput.interactPressed) { hit = true; game.frameInput.interactPressed = false; }
+    for (const s of playerSlots(game)) {
+      const near = nearBox(s.player.body, this.x, this.y, this.w, this.h);
+      game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E', slot: s.index });
+      if (near && s.frameInput.interactPressed) { hit = true; s.frameInput.interactPressed = false; }
+    }
     // thrown objects
     // generous hit zone (the button is small and thrown things are fast): the box grown by 10 px, plus a swept check
     // against where the body was one step ago so a ball cannot tunnel past between two physics steps
@@ -116,10 +128,11 @@ export class Lever {
     this.x = x; this.y = y; this.w = 24; this.h = 24; this.channel = channel; this.on = !!opts.on; this.t = this.on ? 1 : 0;
   }
   update(dt, game) {
-    const p = game.player.body;
-    const near = p.x < this.x + this.w + 28 && p.right > this.x - 28 && p.y < this.y + this.h + 40 && p.bottom > this.y - 64;
-    game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E' });
-    if (near && game.frameInput.interactPressed) { game.frameInput.interactPressed = false; this.on = !this.on; game.sfx('lever'); game.player.playEmote('surprise', 0.3); }
+    for (const s of playerSlots(game)) {
+      const near = nearBox(s.player.body, this.x, this.y, this.w, this.h);
+      game.interactables.push({ x: this.x + this.w / 2, y: this.y, near, label: 'E', slot: s.index });
+      if (near && s.frameInput.interactPressed) { s.frameInput.interactPressed = false; this.on = !this.on; game.sfx('lever'); s.player.playEmote('surprise', 0.3); }
+    }
     this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 12));
     game.channels.set(this.channel, this.on);
   }
@@ -224,8 +237,7 @@ export class Trigger {
     this.x = x; this.y = y; this.w = w; this.h = h; this.onEnter = onEnter; this.once = opts.once ?? true; this.fired = false; this.inside = false; this.onExit = opts.onExit;
   }
   update(dt, game) {
-    const p = game.player.body;
-    const inside = p.x < this.x + this.w && p.right > this.x && p.y < this.y + this.h && p.bottom > this.y;
+    const inside = playerSlots(game).some((s) => { const p = s.player.body; return p.x < this.x + this.w && p.right > this.x && p.y < this.y + this.h && p.bottom > this.y; });
     if (inside && !this.inside && !(this.once && this.fired)) { this.fired = true; this.onEnter(game); }
     if (!inside && this.inside && this.onExit) this.onExit(game);
     this.inside = inside;
@@ -288,15 +300,17 @@ export class FieldGate {
       const blocked = game.world.query(this.x - 2, this.y - 2, this.w + 4, this.h + 4, (b) => !b.dead && b.type !== BodyType.KINEMATIC);
       if (blocked.length) want = false;      // wait until the passage is clear
     }
-    if (want !== this.on) {
-      const first = this.on === null;
-      this.on = want;
-      const cells = [];
-      for (let cy = this.ty; cy < this.ty + this.hT; cy++) for (let cx = this.tx; cx < this.tx + this.wT; cx++) { game.map.set(cx, cy, want ? T.EFIELD : T.EMPTY); cells.push([cx, cy]); }
-      game.tiles.updateCells(cells);
-      if (!first) game.sfx(want ? 'fieldOn' : 'fieldOff');
-    }
+    if (want !== this.on) this.setOn(game, want);
     this.t = lerp(this.t, this.on ? 1 : 0, Math.min(1, dt * 10));
+  }
+  /** Write the field tiles for a new state (also used by the network sync so tiles never disagree with `on`). */
+  setOn(game, want) {
+    const first = this.on === null;
+    this.on = want;
+    const cells = [];
+    for (let cy = this.ty; cy < this.ty + this.hT; cy++) for (let cx = this.tx; cx < this.tx + this.wT; cx++) { game.map.set(cx, cy, want ? T.EFIELD : T.EMPTY); cells.push([cx, cy]); }
+    if (game.tiles) game.tiles.updateCells(cells);
+    if (!first) game.sfx(want ? 'fieldOn' : 'fieldOff');
   }
   draw(ctx, time) {
     // emitter caps stay visible when the field is down (so the player knows where the gate is) + a status lamp

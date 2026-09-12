@@ -11,10 +11,24 @@ Pure HTML5 / JavaScript (Canvas 2D, custom physics). No build step, no dependenc
 Подробная инструкция на русском: [HOW_TO_RUN.md](HOW_TO_RUN.md).
 
 ```bash
-npm start            # static server on http://localhost:8080  (node tools/serve.mjs [port])
+npm run server       # game server (co-op 1–2 players): static files + WebSocket on http://localhost:8080  (node server/index.mjs [port] [startLevel])
+npm start            # static server only, offline single player  (node tools/serve.mjs [port])
 ```
 
 Open `index.html` through the server (ES modules need http).
+
+Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
+
+## Multiplayer (co-op, 1–2 players)
+
+One session, one shared `World`. `npm run server` serves the client and runs the authoritative game headlessly
+(Node, no dependencies; WebSocket on `/ws`). The first client to connect becomes **player 1 (orange cat)** and the
+level starts; the second becomes **player 2 (black cat)** and spawns next to player 1 in the *running* level — nothing
+is reloaded. Each cat has its own controls, Gravity Gun / Portal Gun, crosshair and quantum-tunneling toggle; props,
+portals, doors, plates, lasers and gifts are shared. With two players the exit requires **both** cats standing on it;
+when player 2 leaves, its cat is removed, player 1 keeps playing and the single-player rule returns. Clients send
+input only; the server simulates with the same fixed timestep and broadcasts snapshots (30 Hz) that the clients apply
+on top of their own prediction. See `src/net/`, `server/`, and `npm run test:net`.
 
 ## Controls
 
@@ -86,26 +100,29 @@ sink; a valve (channel) fills or drains a tank and whatever floats rises with it
    the rim, a pressure plate on a pool floor that only a sinking metal cube can hold, and a raft carrying a mirror that a
    rising tank lifts into a ceiling beam.
 
-Progress (unlocked/completed levels, gifts, secrets, settings) is saved in `localStorage`.
-
 ## Project layout
 
 ```
 src/
-  core/        game.js (state machine, loop, rendering), camera.js, input.js, save.js, util.js
+  core/        game.js (session: state machine, loop, rendering, player slots), playerSlot.js, camera.js, input.js, save.js, util.js
+  net/         protocol.js (snapshot encode/apply), client.js (NetClient: WebSocket, input → server, snapshots → game)
   physics/     tilemap.js (tile types), body.js, world.js (AABB physics, stacking, breakables), props.js (prop catalog)
   portals/     portalManager.js (placement, apertures, teleport transform), portalRenderer.js
   weapons/     weapons.js (Gravity Gun + Portal Gun, held models, switching)
-  characters/  cat/player.js (controller + animation state), cat/catSprite.js (procedural cat)
+  characters/  cat/player.js (controller + animation state), cat/catSprite.js (procedural cat; palettes orange / black)
   puzzles/     puzzles.js (PressurePlate, Button, Lever, Door, MovingPlatform, Trigger, Fan, FieldGate, Laser, LaserReceiver, Channels)
   gifts/       gift.js
   levels/      mapBuilder.js, levelKit.js (level DSL), index.js (registry), world01/level0N.js, world02/level0N.js
   render/      tileRenderer.js (themes: house / lab / garden / observatory), effects.js
   ui/          hud.js
   audio/       audio.js (procedural WebAudio sfx + music)
+server/
+  index.mjs    game server (http + /ws), session.mjs (authoritative headless Game, 1–2 slots, 60 Hz tick / 30 Hz snapshots),
+               headless.mjs (DOM shims), wsmini.mjs (dependency-free WebSocket server)
 tools/
   harness.mjs  headless game (node + @napi-rs/canvas): Driver with key/mouse/aim/click/step/shot
-  test.mjs     automated tests (physics, portals, weapons, level 1 playthrough, all-level sanity)
+  test.mjs     automated tests (physics, portals, weapons, water, multiplayer session, level 1 playthrough, all-level sanity)
+  nettest.mjs  end-to-end network test: real server + two clients (npm run test:net)
   smoke.mjs    screenshot pass
   catsheet.mjs cat pose sheets → tools/out/catsheet.png, catbig.png, catidle.png
   walkthroughs/ real-input playthroughs of every level (npm run walk)
@@ -130,7 +147,8 @@ Channels connect activators to receivers: `k.plate(..., 'a')`, `k.door(..., 'a&b
 
 ```bash
 cd tools && npm install     # once: @napi-rs/canvas for the headless harness
-cd .. && npm test           # 171 checks
+cd .. && npm test           # 188 checks
+npm run test:net            # 22 network checks (server + 2 clients)
 npm run walk                # plays all 13 levels start-to-finish with real inputs only (keys + visible aim targets), every gift collected
 ```
 

@@ -22,11 +22,15 @@ export class Gift {
   }
   update(dt, game) {
     if (this.collected) { this.pop += dt; return; }
-    const p = game.player.body;
     const bob = Math.sin(game.time * 2 + this.phase) * 3;
-    if (p.x < this.x + this.w && p.right > this.x && p.y < this.y + this.h + bob && p.bottom > this.y + bob) {
-      this.collected = true;
-      game.onGiftCollected(this);
+    for (const cat of (game.players || [game.player])) {   // either cat may pick it up (shared collection)
+      if (!cat) continue;
+      const p = cat.body;
+      if (p.x < this.x + this.w && p.right > this.x && p.y < this.y + this.h + bob && p.bottom > this.y + bob) {
+        this.collected = true;
+        game.onGiftCollected(this, cat);
+        return;
+      }
     }
   }
   draw(ctx, time) {

@@ -21,6 +21,7 @@ import { HUD, panel, roundRect } from '../ui/hud.js';
 import { LevelKit } from '../levels/levelKit.js';
 import { LEVELS } from '../levels/index.js';
 import { drawGiftBox, GIFT_TYPES } from '../gifts/gift.js';
+import { PlayerSlot, MAX_PLAYERS, blankInput } from './playerSlot.js';
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
@@ -51,7 +52,112 @@ export class Game {
     this.hintText = '';
     this.audio.volume = this.save.data.settings.volume ?? 0.8;
     this.testHooks = {};
-    this.frameInput = { interactPressed: false };
+    // ---- session: one shared World, 1..2 player slots. Slot 0 = player 1 (orange), slot 1 = player 2 (black).
+    // Offline the local input devices drive slot 0; online the NetClient decides which slot is local and feeds
+    // the other slot's input from the server (see src/net/). The server runs the same Game headless.
+    this.slots = Array.from({ length: MAX_PLAYERS }, (_, i) => new PlayerSlot(i));
+    this.localSlot = 0;
+    this.slots[0].connected = true; this.slots[0].local = true;
+    this.headless = false;        // server mode: no rendering, no local input devices
+    this.net = null;              // NetClient when playing online (client side)
+    this.levelSeq = 0;            // increments on every loadLevel (lets clients detect restarts)
+  }
+
+  /** Server mode: no rendering/devices, nobody connected until the network says so. */
+  setupHeadless() {
+    this.headless = true;
+    for (const s of this.slots) { s.connected = false; s.local = false; }
+    this.localSlot = 0;
+  }
+
+  // ------------------------------------------------------------------ players (session slots)
+  /** The locally controlled cat (camera/HUD follow it). Falls back to the first active slot (headless server). */
+  get localPlayerSlot() { const s = this.slots[this.localSlot]; return s && s.player ? s : this.activeSlots()[0] || s; }
+  get player() { return this.localPlayerSlot.player; }
+  get weapons() { return this.localPlayerSlot.weapons; }
+  get frameInput() { return this.localPlayerSlot.frameInput; }
+  set frameInput(v) { this.localPlayerSlot.frameInput = v; }
+  /** Slots that currently have a cat in the world (connected players). */
+  activeSlots() { return this.slots.filter((s) => s.active); }
+  /** All cats currently in the world. */
+  get players() { return this.activeSlots().map((s) => s.player); }
+  playerCount() { return this.activeSlots().length; }
+
+  /** Create the cat + weapon system for a slot at (x, y) (top-left of the body) in the current level. */
+  spawnSlot(slot, x, y) {
+    const p = new Player(x, y, { palette: slot.palette, slot: slot.index });
+    p.events = (n, d) => this.onPlayerEvent(p, n, d);
+    p.body.netId = slot.bodyNetId;
+    this.world.add(p.body);
+    const ws = new WeaponSystem(p, this.world, this.portals, this);
+    p.weapon = ws;
+    slot.player = p; slot.weapons = ws; slot.frameInput = { interactPressed: false, pendingSteps: false };
+    slot.input = blankInput();
+    return slot;
+  }
+  /** Remove a slot's cat from the world (keeps the slot object). */
+  despawnSlot(slot) {
+    if (!slot.player) return;
+    if (slot.weapons && slot.weapons.held) slot.weapons.drop(false);
+    slot.player.body.dead = true;
+    this.world.bodies = this.world.bodies.filter((b) => b !== slot.player.body);
+    slot.player = null; slot.weapons = null;
+  }
+  /** Start position of the level (top-left of the cat body). */
+  startPos() { return { x: this.level.start[0] * TILE + (TILE - 30) / 2, y: this.level.start[1] * TILE - 54 }; }
+  /**
+   * A safe standing spot for a newcomer near another cat: free tiles (2 high) with solid ground below, searched in
+   * rings around the anchor; falls back to the level start.
+   */
+  safeSpotNear(px, py) {
+    const map = this.map;
+    const cx0 = Math.floor((px + 15) / TILE), cy0 = Math.floor((py + 54) / TILE);   // tile under the feet
+    const free = (cx, cy) => !map.isSolid(map.get(cx, cy)) && !map.isField(map.get(cx, cy));
+    const ok = (cx, cy) => free(cx, cy) && free(cx, cy - 1) && map.isSolid(map.get(cx, cy + 1)) && !map.isField(map.get(cx, cy + 1))
+      && !this.world.query(cx * TILE + 2, cy * TILE - TILE + 2, TILE - 4, TILE * 2 - 4, (b) => !b.dead && b.type !== 'kinematic' && b.kind !== 'cat').length;
+    for (let r = 1; r <= 8; r++) for (const dx of [r, -r, 0]) for (let dy = -2; dy <= 2; dy++) {
+      const cx = cx0 + dx, cy = cy0 + dy;
+      if (dx === 0 && dy === 0) continue;
+      if (ok(cx, cy)) return { x: cx * TILE + 1, y: (cy + 1) * TILE - 54 };
+    }
+    if (ok(cx0, cy0)) return { x: cx0 * TILE + 1, y: (cy0 + 1) * TILE - 54 };
+    return this.startPos();
+  }
+  /**
+   * A player joins the running session: the cat appears next to player 1 (or at the start) in the EXISTING world;
+   * nothing is reloaded. Unlocks (weapons, tunneling) are shared session-wide so a late joiner can help right away.
+   */
+  addPlayer(index) {
+    const slot = this.slots[index];
+    if (!slot) return null;
+    slot.connected = true;
+    if (!this.level) return slot;           // no level yet: the cat is created by loadLevel
+    if (slot.player) return slot;
+    const anchor = this.activeSlots().find((s) => s !== slot);
+    const at = anchor ? this.safeSpotNear(anchor.player.body.x, anchor.player.body.y) : this.startPos();
+    this.spawnSlot(slot, at.x, at.y);
+    if (anchor) {
+      for (const k of ['gravity', 'portal']) if (anchor.weapons.available[k]) slot.weapons.unlock(k);
+      slot.player.tunnelUnlocked = anchor.player.tunnelUnlocked;
+      slot.player.facing = anchor.player.facing;
+    }
+    slot.player.playEmote('happy', 1.0);
+    this.effects.burst({ x: slot.player.cx, y: slot.player.cy }, '#FFFFFF', 16, 220);
+    this.hud.show(`${slot.name} присоединился!`, index === 1 ? 'Чёрный кот — теперь выход открывается, когда на нём стоят оба' : '', 3);
+    this.audio.play('checkpoint');
+    return slot;
+  }
+  /** A player leaves: the cat is removed, the world keeps running for the others (no restart). */
+  removePlayer(index) {
+    const slot = this.slots[index];
+    if (!slot || !slot.connected) return;
+    if (slot.player) {
+      this.effects.burst({ x: slot.player.cx, y: slot.player.cy }, '#9FB4C8', 12, 180);
+      // a cat standing on a plate for its partner keeps the door open only while it is there — same as walking away
+      this.despawnSlot(slot);
+    }
+    slot.connected = false;
+    if (this.level) this.hud.show(`${slot.name} отключился`, '', 2);
   }
 
   // ------------------------------------------------------------------ level lifecycle
@@ -74,18 +180,25 @@ export class Game {
     this.giftsCollected = 0;
     this.time = 0;
     this.levelDoneTimer = -1;
-    this.player = new Player(def.start[0] * TILE + (TILE - 30) / 2, def.start[1] * TILE - 54);
-    this.player.events = (n, d) => this.onPlayerEvent(n, d);
-    this.world.add(this.player.body);
-    this.weapons = new WeaponSystem(this.player, this.world, this.portals, this);
-    this.player.weapon = this.weapons;
-    this.tiles = new TileRenderer(this.map, def.theme || 'house');
+    this.levelSeq++;
+    this.tileChanges = [];
+    this.deadNetIds = [];
+    // cats: one per connected slot, side by side at the start
+    const start = this.startPos();
+    let n = 0;
+    for (const slot of this.slots) { slot.player = null; slot.weapons = null; if (slot.connected) this.spawnSlot(slot, start.x + (n++) * 34, start.y); }
+    this.tiles = this.headless ? { updateCells() {} } : new TileRenderer(this.map, def.theme || 'house');
     this.camera.setBounds(this.map.width, this.map.height);
     this.effects = new Effects();
     const kit = new LevelKit(this);
     def.setup(kit, this);
-    if (def.weapons) for (const w of def.weapons) this.weapons.unlock(w);
-    if (def.abilities && def.abilities.includes('tunnel')) this.player.tunnelUnlocked = true;
+    for (const s of this.activeSlots()) {
+      if (def.weapons) for (const w of def.weapons) s.weapons.unlock(w);
+      if (def.abilities && def.abilities.includes('tunnel')) s.player.tunnelUnlocked = true;
+    }
+    // stable ids for network sync: level bodies in creation order (cats have fixed ids per slot)
+    let nid = 1; for (const b of this.world.bodies) if (b.kind !== 'cat') b.netId = nid++;
+    this.nextNetId = nid;
     if (def.exit) this.exit = { x: def.exit[0] * TILE, y: def.exit[1] * TILE, w: TILE * (def.exitW || 2), h: TILE * 2 };
     this.giftsTotal = this.gifts.length;
     // already-collected gifts stay collected (progress is persistent) — but show them for replay value
@@ -98,17 +211,19 @@ export class Game {
     this.world.onSplash = (b, speed, x, y) => {
       this.audio.play('splash', { speed });
       for (let i = 0; i < 6 + Math.min(10, speed / 60); i++) this.effects.spawnParticle(x + (Math.random() - 0.5) * b.w, y, (Math.random() - 0.5) * 160, -80 - Math.random() * Math.min(260, speed * 0.6), 0.5 + Math.random() * 0.3, i % 3 ? 'rgba(180,225,255,0.85)' : '#FFFFFF', 2 + Math.random() * 2, 700);
-      if (b.kind === 'cat') { this.player.playEmote('surprise', 0.35); this.effects.shake(Math.min(3, speed / 300)); }
+      if (b.kind === 'cat' && b.controller) { b.controller.playEmote('surprise', 0.35); if (b.controller === this.player) this.effects.shake(Math.min(3, speed / 300)); }
     };
     this.portals.onTeleport = (b, from, to) => this.onTeleport(b, from, to);
-    this.camera.snapTo(this.player.cx, this.player.cy);
+    if (this.player) this.camera.snapTo(this.player.cx, this.player.cy);
     this.hud.message = null;
     if (!keepMessage) this.hud.show(def.name, def.subtitle || '', 3);
     this.state = 'playing';
     this.audio.startMusic(def.theme || 'house');
   }
 
-  restartLevel() { this.loadLevel(this.levelIndex, { keepMessage: true }); }
+  restartLevel() { if (this.net) this.net.ui('restart'); else this.loadLevel(this.levelIndex, { keepMessage: true }); }
+  /** Level chosen in the menu (online: the server loads it for everyone). */
+  chooseLevel(i) { if (this.net) this.net.ui('level', i); else this.loadLevel(i); }
 
   nextLevel() {
     const cur = LEVELS[this.levelIndex], next = LEVELS[this.levelIndex + 1];
@@ -117,7 +232,7 @@ export class Game {
   }
   updateWorldDone(dt, inp) {
     this.time += dt; this.worldDoneTimer += dt;
-    if (this.worldDoneTimer > 1 && (inp.enter || inp.lmbPressed || inp.pause)) { this.audio.play('ui'); this.state = 'select'; this.menuIndex = 0; }
+    if (this.worldDoneTimer > 1 && (inp.enter || inp.lmbPressed || inp.pause)) { this.audio.play('ui'); if (this.net) this.net.ui('menu'); else { this.state = 'select'; this.menuIndex = 0; } }
   }
   /** World summary: per-level gifts & secrets, totals. */
   renderWorldDone(ctx) {
@@ -167,38 +282,40 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ events
-  onPlayerEvent(name, data) {
+  onPlayerEvent(p, name, data) {
+    const mine = p === this.player;     // HUD messages only for the local cat; sounds/particles for both
     switch (name) {
       case 'jump': this.audio.play('jump'); break;
-      case 'land': this.audio.play('land', data); if (data.speed > 250) this.effects.dust(this.player.cx, this.player.feetY, 6); break;
+      case 'land': this.audio.play('land', data); if (data.speed > 250) this.effects.dust(p.cx, p.feetY, 6); break;
       case 'step': this.audio.play('step', data); break;
       case 'teleport': this.audio.play('teleport'); break;
-      case 'paddle': this.audio.play('paddle'); this.effects.spawnParticle(this.player.cx + (Math.random() - 0.5) * 20, this.player.body.y + 14, (Math.random() - 0.5) * 80, -60 - Math.random() * 60, 0.35, 'rgba(200,235,255,0.8)', 2, 600); break;
-      case 'splashOut': this.audio.play('splash', { speed: 300 }); for (let i = 0; i < 10; i++) this.effects.spawnParticle(this.player.cx + (Math.random() - 0.5) * 30, this.player.body.bottom, (Math.random() - 0.5) * 200, -100 - Math.random() * 200, 0.5, 'rgba(180,225,255,0.85)', 2 + Math.random() * 2, 700); break;
-      case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: this.player.cx, y: this.player.body.cy }, '#7FD3FF', 14, 160); this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в потенциальный барьер — шанс пройти 25%', 2.5); break;
-      case 'tunnelOff': this.audio.play('tunnelOff'); this.hud.show('Квантовое туннелирование: ВЫКЛ', '', 1.5); break;
+      case 'paddle': this.audio.play('paddle'); this.effects.spawnParticle(p.cx + (Math.random() - 0.5) * 20, p.body.y + 14, (Math.random() - 0.5) * 80, -60 - Math.random() * 60, 0.35, 'rgba(200,235,255,0.8)', 2, 600); break;
+      case 'splashOut': this.audio.play('splash', { speed: 300 }); for (let i = 0; i < 10; i++) this.effects.spawnParticle(p.cx + (Math.random() - 0.5) * 30, p.body.bottom, (Math.random() - 0.5) * 200, -100 - Math.random() * 200, 0.5, 'rgba(180,225,255,0.85)', 2 + Math.random() * 2, 700); break;
+      case 'tunnelOn': this.audio.play('tunnelOn'); this.effects.burst({ x: p.cx, y: p.body.cy }, '#7FD3FF', 14, 160); if (mine) this.hud.show('Квантовое туннелирование: ВКЛ', 'Разбегись (Shift) и беги в потенциальный барьер — шанс пройти 25%', 2.5); break;
+      case 'tunnelOff': this.audio.play('tunnelOff'); if (mine) this.hud.show('Квантовое туннелирование: ВЫКЛ', '', 1.5); break;
     }
   }
   /** Electric-field contact: sparks, sound, cat reaction. */
   onField(b, kind, x, y, nx, ny, speed = 0) {
-    const isCat = b.kind === 'cat';
+    const isCat = b.kind === 'cat' && !!b.controller;
+    const cat = isCat ? b.controller : null, mine = cat === this.player;
     if (kind === 'pass') {
       this.audio.play('tunnelPass');
       this.effects.burst({ x, y }, '#9FE7FF', 22, 240);
       this.effects.burst({ x, y }, '#FFFFFF', 8, 120);
-      if (isCat) { this.player.fieldFlash = 0.5; this.player.playEmote('happy', 0.9); this.effects.text(b.cx, b.y - 14, 'туннель!', '#BFF0FF'); }
-      this.input.rumble(0.2, 0.6, 120);
+      if (isCat) { cat.fieldFlash = 0.5; cat.playEmote('happy', 0.9); this.effects.text(b.cx, b.y - 14, 'туннель!', '#BFF0FF'); }
+      if (mine) this.input.rumble(0.2, 0.6, 120);
     } else {
       this.audio.play('zap', { speed });
       const n = speed > 250 ? 14 : 5;
       for (let i = 0; i < n; i++) this.effects.spawnParticle(x, y + (Math.random() - 0.5) * 40, nx * (120 + Math.random() * 260) + (Math.random() - 0.5) * 120, ny * (120 + Math.random() * 260) + (Math.random() - 0.5) * 220, 0.3 + Math.random() * 0.3, i % 3 ? '#8FE3FF' : '#FFFFFF', 2 + Math.random() * 2, 300);
-      if (isCat && speed > 250) { this.player.fieldFlash = 0.3; this.player.playEmote('surprise', 0.7); this.effects.shake(3); this.input.rumble(0.5, 0.3, 90); }
+      if (isCat && speed > 250) { cat.fieldFlash = 0.3; cat.playEmote('surprise', 0.7); if (mine) { this.effects.shake(3); this.input.rumble(0.5, 0.3, 90); } }
       // contextual hints (only when no other message is showing)
-      if (isCat && speed >= 100 && !this.hud.message) {
-        if (!this.player.tunnelUnlocked) this.hud.show('Потенциальный барьер', 'Сквозь него не пройти… пока', 2);
-        else if (!this.player.tunneling) this.hud.show('Потенциальный барьер', `Включи квантовый режим: ${this.btn('q')}`, 2.5);
+      if (mine && speed >= 100 && !this.hud.message) {
+        if (!cat.tunnelUnlocked) this.hud.show('Потенциальный барьер', 'Сквозь него не пройти… пока', 2);
+        else if (!cat.tunneling) this.hud.show('Потенциальный барьер', `Включи квантовый режим: ${this.btn('q')}`, 2.5);
         else if (speed < 260) this.hud.show('Нужен разбег!', 'Беги в барьер с зажатым Shift', 2.5);
-        else this.player.playEmote('confused', 0.8);
+        else cat.playEmote('confused', 0.8);
       }
     }
   }
@@ -208,16 +325,17 @@ export class Game {
     if (speed > 350) this.effects.burst({ x: b.cx, y: b.cy }, 'rgba(255,255,255,0.6)', 4, 120);
   }
   onBreak(b) {
+    if (b.netId) this.deadNetIds.push(b.netId);
     this.audio.play('break');
     this.effects.debris(b, b.color || '#fff');
-    if (this.weapons.held === b) this.weapons.held = null;
-    if (this.weapons.pulling === b) this.weapons.pulling = null;
+    for (const s of this.activeSlots()) { if (s.weapons.held === b) s.weapons.held = null; if (s.weapons.pulling === b) s.weapons.pulling = null; }
     this.brokenCount = (this.brokenCount || 0) + 1;
   }
   onTileBreak(tiles, b) {
     this.audio.play('break'); this.audio.play('impact', { material: 'wood', speed: 900 }); this.input.rumble(0.8, 0.5, 200);
     this.effects.shake(6);
     for (const [cx, cy] of tiles) for (let i = 0; i < 4; i++) this.effects.spawnParticle(cx * TILE + Math.random() * TILE, cy * TILE + Math.random() * TILE, (Math.random() - 0.5) * 300 + b.vx * 0.2, -Math.random() * 250, 0.8, ['#B9A08A', '#8A705A', '#D8C4AE'][i % 3], 3 + Math.random() * 3, 900);
+    for (const [cx, cy] of tiles) this.tileChanges.push([cx, cy, this.map.get(cx, cy)]);
     this.tiles.updateCells(tiles);
     this.hud.show('Стена разрушена!', '', 2);
   }
@@ -225,10 +343,10 @@ export class Game {
     this.effects.burst({ x: b.cx, y: b.cy }, to.color === 'blue' ? '#9CC7FF' : '#FFC48A', 10, 200);
     if (b.kind !== 'cat') this.audio.play('teleport');
   }
-  onGiftCollected(g) {
+  onGiftCollected(g, by = this.player) {
     this.giftsCollected++;
-    this.audio.play('gift'); this.input.rumble(0.3, 0.6, 150);
-    this.player.playEmote('collect', 1.1);
+    this.audio.play('gift'); if (by === this.player) this.input.rumble(0.3, 0.6, 150);
+    if (by) by.playEmote('collect', 1.1);
     this.effects.burst({ x: g.x + g.w / 2, y: g.y + g.h / 2 }, g.def.ribbon, 18, 260);
     this.effects.text(g.x + g.w / 2, g.y - 10, g.def.label + '!', '#FFE9B8');
     const isNew = this.save.collectGift(this.level.id, g.id);
@@ -239,7 +357,7 @@ export class Game {
     this.save.findSecret(this.level.id, id);
     this.hud.show('Секрет найден!', '', 2.5);
     this.audio.play('checkpoint');
-    this.player.playEmote('surprise', 0.8);
+    if (this.player) this.player.playEmote('surprise', 0.8);
   }
   sfx(name, arg) {
     this.audio.play(name, arg);
@@ -259,8 +377,10 @@ export class Game {
     if (dt > 0.1) dt = 0.1;
     this.stats.frames++; this.stats.t += dt; if (this.stats.t >= 0.5) { this.stats.fps = Math.round(this.stats.frames / this.stats.t); this.stats.frames = 0; this.stats.t = 0; }
     this.input.padMenuBack = this.state !== 'playing';
-    this.input.poll();
-    const inp = this.input.frame();
+    let inp;
+    if (this.headless) inp = blankInput();
+    else { this.input.poll(); inp = this.input.frame(); }
+    if (this.net) this.net.beforeFrame(inp);   // online: level/state from the server, remote inputs, edge policy
     if (inp.any && !this.audio.ctx) { this.audio.init(); if (this.state === 'playing') this.audio.startMusic(this.level.theme || 'house'); }
     this.audio.resume();
     if (inp.mute) { const on = this.audio.toggleMusic(); this.save.data.settings.music = on; this.save.save(); }
@@ -274,7 +394,8 @@ export class Game {
       case 'complete': this.updateComplete(dt, inp); break;
       case 'worldDone': this.updateWorldDone(dt, inp); break;
     }
-    this.render();
+    if (this.net) this.net.afterFrame(inp);
+    if (!this.headless) this.render();
     this.input.endFrame();
   }
 
@@ -304,10 +425,10 @@ export class Game {
       const c = cells[i];
       if (inp.mouseX >= c.x && inp.mouseX <= c.x + c.w && inp.mouseY >= c.y && inp.mouseY <= c.y + c.h) {
         this.menuIndex = i;
-        if (inp.lmbPressed && this.save.isUnlocked(LEVELS, i)) { this.audio.play('ui'); this.loadLevel(i); return; }
+        if (inp.lmbPressed && this.save.isUnlocked(LEVELS, i)) { this.audio.play('ui'); this.chooseLevel(i); return; }
       }
     }
-    if (inp.enter && this.save.isUnlocked(LEVELS, this.menuIndex)) { this.audio.play('ui'); this.loadLevel(this.menuIndex); }
+    if (inp.enter && this.save.isUnlocked(LEVELS, this.menuIndex)) { this.audio.play('ui'); this.chooseLevel(this.menuIndex); }
     if (inp.pause) this.state = 'title';
     if (this.input.wasPressed('Delete') && this.input.down('ShiftLeft')) { this.save.reset(); }
   }
@@ -348,33 +469,35 @@ export class Game {
       { label: 'Перезапустить уровень', fn: () => this.restartLevel() },
       { label: `Музыка: ${this.audio.musicOn ? 'вкл' : 'выкл'}  (M)`, fn: () => { const on = this.audio.toggleMusic(); this.save.data.settings.music = on; this.save.save(); } },
       { label: `Громкость: ${'■'.repeat(Math.round(this.audio.volume * 5))}${'□'.repeat(5 - Math.round(this.audio.volume * 5))}  (←/→)`, fn: () => this.adjustVolume(0.2), adjust: (d) => this.adjustVolume(d * 0.2) },
-      { label: 'Выбор уровня', fn: () => { this.state = 'select'; this.menuIndex = this.levelIndex; this.audio.stopMusic(); } },
+      { label: 'Выбор уровня', fn: () => { if (this.net) this.net.ui('menu'); else { this.state = 'select'; this.menuIndex = this.levelIndex; this.audio.stopMusic(); } } },
     ];
   }
   updateComplete(dt, inp) {
     this.time += dt;
     this.effects.update(dt);
     this.completeTimer += dt;
-    if (this.completeTimer > 0.8 && (inp.enter || inp.lmbPressed)) { this.audio.play('ui'); this.nextLevel(); }
-    if (inp.pause) { this.state = 'select'; this.menuIndex = this.levelIndex; }
+    if (this.completeTimer > 0.8 && (inp.enter || inp.lmbPressed)) { this.audio.play('ui'); if (this.net) this.net.ui('next'); else this.nextLevel(); }
+    if (inp.pause) { if (this.net) this.net.ui('menu'); else { this.state = 'select'; this.menuIndex = this.levelIndex; } }
   }
 
   /** Mirror cubes: standing next to one (not holding anything) and pressing E flips its diagonal. */
-  updateMirrors(inp) {
-    const p = this.player.body;
-    let best = null, bestD = Infinity;
-    for (const b of this.world.bodies) {
-      if (b.dead || b.kind !== 'mirror' || b.held) continue;
-      const d = Math.hypot(b.cx - p.cx, b.cy - p.cy);
-      if (d < 72 && d < bestD) { best = b; bestD = d; }
-    }
-    if (!best) return;
-    this.interactables.push({ x: best.cx, y: best.y - 4, near: true, label: 'E' });
-    if (inp.interactPressed && !this.weapons.held && !this.interactables.some((it) => it.near && it.label === 'E' && it.x !== best.cx)) {
-      inp.interactPressed = false;
-      best.mirrorDir = -(best.mirrorDir || 1); best.wake();
-      this.sfx('mirrorFlip');
-      this.effects.burst({ x: best.cx, y: best.cy }, '#CFE8FF', 6, 120);
+  updateMirrors() {
+    for (const slot of this.activeSlots()) {
+      const p = slot.player.body, inp = slot.frameInput;
+      let best = null, bestD = Infinity;
+      for (const b of this.world.bodies) {
+        if (b.dead || b.kind !== 'mirror' || b.held) continue;
+        const d = Math.hypot(b.cx - p.cx, b.cy - p.cy);
+        if (d < 72 && d < bestD) { best = b; bestD = d; }
+      }
+      if (!best) continue;
+      this.interactables.push({ x: best.cx, y: best.y - 4, near: true, label: 'E', slot: slot.index });
+      if (inp.interactPressed && !slot.weapons.held && !this.interactables.some((it) => it.near && it.label === 'E' && it.x !== best.cx && (it.slot === undefined || it.slot === slot.index))) {
+        inp.interactPressed = false;
+        best.mirrorDir = -(best.mirrorDir || 1); best.wake();
+        this.sfx('mirrorFlip');
+        this.effects.burst({ x: best.cx, y: best.cy }, '#CFE8FF', 6, 120);
+      }
     }
   }
 
@@ -384,22 +507,32 @@ export class Game {
     this.time += dt;
     this.hintText = '';
     this.interactables = [];
-    if (inp.padAiming) { // gamepad: virtual cursor on a ring around the cat's paws
-      const h = this.player.handPos();
-      const s = this.camera.worldToScreen(h.x + inp.padAimX * 170, h.y + inp.padAimY * 170);
-      inp.mouseX = this.input.mouseX = s.x; inp.mouseY = this.input.mouseY = s.y;
-      this.input._lastMouse.x = s.x; this.input._lastMouse.y = s.y;
+    // ---- per-player input: the local slot reads the devices, the others get their snapshot from the network
+    const local = this.slots[this.localSlot];
+    if (local.connected && !this.headless) {
+      if (inp.padAiming && local.player) { // gamepad: virtual cursor on a ring around the cat's paws
+        const h = local.player.handPos();
+        const s = this.camera.worldToScreen(h.x + inp.padAimX * 170, h.y + inp.padAimY * 170);
+        inp.mouseX = this.input.mouseX = s.x; inp.mouseY = this.input.mouseY = s.y;
+        this.input._lastMouse.x = s.x; this.input._lastMouse.y = s.y;
+      }
+      const mw = this.camera.screenToWorld(inp.mouseX, inp.mouseY);
+      this.input.mouseWorldX = mw.x; this.input.mouseWorldY = mw.y;
+      inp.mouseWorldX = mw.x; inp.mouseWorldY = mw.y;
+      local.input = inp;
     }
-    const mw = this.camera.screenToWorld(inp.mouseX, inp.mouseY);
-    this.input.mouseWorldX = mw.x; this.input.mouseWorldY = mw.y;
-    inp.mouseWorldX = mw.x; inp.mouseWorldY = mw.y;
-    // puzzles read one-shot presses from here (and consume them). A frame may run zero physics steps, so latch the
-    // press until a step has actually seen it — otherwise E presses could be silently dropped.
-    if (this.frameInput && this.frameInput.interactPressed && this.frameInput.pendingSteps) inp.interactPressed = true;
-    this.frameInput = inp; inp.pendingSteps = true;
-    this.player.setInput({ left: inp.left, right: inp.right, up: inp.up, down: inp.down, jump: inp.jump, run: inp.run });
-    if (inp.jumpPressed) this.player.input.jumpPressed = true;
-    if (inp.tunnelPressed && this.player.tunnelUnlocked) this.player.toggleTunneling();
+    const active = this.activeSlots();
+    for (const slot of active) {
+      const si = slot.input;
+      // puzzles read one-shot presses from slot.frameInput (and consume them). A frame may run zero physics steps,
+      // so latch the press until a step has actually seen it — otherwise E presses could be silently dropped.
+      if (slot.frameInput && slot.frameInput.interactPressed && slot.frameInput.pendingSteps) si.interactPressed = true;
+      slot.frameInput = si; si.pendingSteps = true;
+      const p = slot.player;
+      p.setInput({ left: si.left, right: si.right, up: si.up, down: si.down, jump: si.jump, run: si.run });
+      if (si.jumpPressed) p.input.jumpPressed = true;
+      if (si.tunnelPressed && p.tunnelUnlocked) p.toggleTunneling();
+    }
 
     // fixed-step physics
     this.accumulator += dt;
@@ -407,70 +540,74 @@ export class Game {
     while (this.accumulator >= FIXED_DT && steps < 8) {
       this.frameId = (this.frameId || 0) + 1;      // physics-step counter (per-step caches, e.g. Laser optics)
       for (const p of this.puzzles) p.update(FIXED_DT, this);
-      this.updateMirrors(inp);   // after puzzles: a lever/button next to a mirror gets the E press first
+      this.updateMirrors();   // after puzzles: a lever/button next to a mirror gets the E press first
       this.world.step(FIXED_DT);
       this.accumulator -= FIXED_DT; steps++;
-      inp.pendingSteps = false; inp.interactPressed = false;   // one-shots consumed by this step
+      for (const slot of active) { slot.frameInput.pendingSteps = false; slot.frameInput.interactPressed = false; }   // one-shots consumed by this step
     }
     if (steps === 8) this.accumulator = 0;
-    this.player.update(dt, this.world);
-    this.weapons.update(dt, inp);
+    for (const slot of active) { slot.player.update(dt, this.world); slot.weapons.update(dt, slot.input); }
     this.portals.update(dt);
     for (const g of this.gifts) g.update(dt, this);
+    // pickups: whoever touches it unlocks the item for the whole session (both cats can then use it)
     for (const p of this.pickups) {
       if (p.taken) continue;
-      const b = this.player.body;
-      if (b.x < p.x + 40 && b.right > p.x - 12 && b.y < p.y + 40 && b.bottom > p.y - 12) {
-        p.taken = true;
-        this.audio.play('unlock'); this.player.playEmote('happy', 1.2);
-        if (p.kind === 'tunnel') {
-          this.player.tunnelUnlocked = true;
-          this.hud.show('Режим квантового туннелирования!', `${this.btn('q')} — включить/выключить. С разбега (Shift) беги в потенциальный барьер: шанс пройти 25%, иначе отскок`, 6);
-          this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#8FE3FF', 26, 300);
-        } else {
-          this.weapons.unlock(p.kind); this.weapons.select(p.kind);
-          this.hud.show(p.kind === 'gravity' ? 'Gravity Gun получена!' : 'Portal Gun получена!', p.kind === 'gravity' ? `${this.btn('lmb')} — схватить / бросить, ${this.btn('rmb')} — толкнуть. Клавиша ${this.btn('k1')}` : `${this.btn('lmb')} — синий портал, ${this.btn('rmb')} — оранжевый. Клавиша ${this.btn('k2')}`, 4.5);
-          this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#FFE9B8', 20, 280);
-        }
-      }
+      const taker = active.find((s) => { const b = s.player.body; return b.x < p.x + 40 && b.right > p.x - 12 && b.y < p.y + 40 && b.bottom > p.y - 12; });
+      if (taker) this.takePickup(p, taker);
     }
-    // signs
-    for (const s of this.signs) {
+    // signs (hints are HUD → the local cat only)
+    if (this.player) for (const s of this.signs) {
       const b = this.player.body;
       if (b.right > s.x - 20 && b.x < s.x + s.w * TILE + 20 && Math.abs(b.bottom - (s.y + TILE)) < 90) this.hintText = s.text;
     }
-    // exit
-    if (this.exit && this.levelDoneTimer < 0) {
-      const b = this.player.body, e = this.exit;
-      if (b.x < e.x + e.w && b.right > e.x && b.y < e.y + e.h && b.bottom > e.y && this.player.onGround) this.finishLevel();
-    }
+    // exit: with one cat — the cat stands on it; with two — BOTH must stand on it (the rule follows the player count)
+    if (this.exit && this.levelDoneTimer < 0 && active.length && !this.net && this.allAtExit()) this.finishLevel();   // online: the server decides
     if (this.levelDoneTimer >= 0) { this.levelDoneTimer += dt; if (this.levelDoneTimer > 1.4) { this.state = 'complete'; this.completeTimer = 0; } }
     // fell out of the world → respawn at start (no death, just a gentle reset of the cat)
-    if (this.player.body.y > this.map.height + 200) this.respawn();
-    for (const b of this.world.bodies) if (b.y > this.map.height + 400 && b !== this.player.body) b.dead = true;
+    if (!this.net) for (const slot of active) if (slot.player.body.y > this.map.height + 200) this.respawn(slot);
+    for (const b of this.world.bodies) if (b.y > this.map.height + 400 && b.kind !== 'cat' && !b.dead) { b.dead = true; if (b.netId) this.deadNetIds.push(b.netId); }
 
     this.effects.update(dt);
     if (this.effects.shakeAmt > 0) this.camera.applyShake(this.effects.shakeAmt); else { this.camera.shakeX = 0; this.camera.shakeY = 0; }
-    this.camera.follow(this.player, dt);
+    if (this.player) this.camera.follow(this.player, dt);
     this.hud.update(dt);
     // random meows for personality
-    if (Math.random() < dt * 0.02 && this.player.anim === 'idle') this.audio.play('meow');
+    if (this.player && Math.random() < dt * 0.02 && this.player.anim === 'idle') this.audio.play('meow');
   }
+  /** A pickup is taken by `taker` (a slot): the item is unlocked for every cat of the session. */
+  takePickup(p, taker) {
+    p.taken = true; p.takenBy = taker.index;
+    const active = this.activeSlots();
+    this.audio.play('unlock'); if (taker.player) taker.player.playEmote('happy', 1.2);
+    if (p.kind === 'tunnel') {
+      for (const s of active) s.player.tunnelUnlocked = true;
+      this.hud.show('Режим квантового туннелирования!', `${this.btn('q')} — включить/выключить. С разбега (Shift) беги в потенциальный барьер: шанс пройти 25%, иначе отскок`, 6);
+      this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#8FE3FF', 26, 300);
+    } else {
+      for (const s of active) { s.weapons.unlock(p.kind); if (s === taker) s.weapons.select(p.kind); }
+      this.hud.show(p.kind === 'gravity' ? 'Gravity Gun получена!' : 'Portal Gun получена!', p.kind === 'gravity' ? `${this.btn('lmb')} — схватить / бросить, ${this.btn('rmb')} — толкнуть. Клавиша ${this.btn('k1')}` : `${this.btn('lmb')} — синий портал, ${this.btn('rmb')} — оранжевый. Клавиша ${this.btn('k2')}`, 4.5);
+      this.effects.burst({ x: p.x + 14, y: p.y + 14 }, '#FFE9B8', 20, 280);
+    }
+  }
+  /** Is a cat standing in the exit zone? */
+  atExit(p) { const b = p.body, e = this.exit; return b.x < e.x + e.w && b.right > e.x && b.y < e.y + e.h && b.bottom > e.y && p.onGround; }
+  allAtExit() { return this.activeSlots().every((s) => this.atExit(s.player)); }
+  /** True when someone is waiting at the exit for the partner (HUD hint). */
+  waitingAtExit() { const a = this.activeSlots(); return a.length > 1 && this.exit && a.some((s) => this.atExit(s.player)) && !this.allAtExit(); }
 
-  respawn() {
-    const b = this.player.body;
-    if (this.weapons.held) this.weapons.drop(false);
-    b.x = this.level.start[0] * TILE + 1; b.y = this.level.start[1] * TILE - 54; b.vx = 0; b.vy = 0;
-    this.player.playEmote('confused', 1.2);
-    this.hud.show('Ой! Назад на старт', '', 2);
+  respawn(slot = this.localPlayerSlot) {
+    const b = slot.player.body;
+    if (slot.weapons.held) slot.weapons.drop(false);
+    b.x = this.level.start[0] * TILE + 1 + slot.index * 34; b.y = this.level.start[1] * TILE - 54; b.vx = 0; b.vy = 0;
+    slot.player.playEmote('confused', 1.2);
+    if (slot.player === this.player) this.hud.show('Ой! Назад на старт', '', 2);
   }
 
   finishLevel() {
     this.levelDoneTimer = 0;
     this.save.complete(this.level.id);
     this.audio.play('levelDone');
-    this.player.playEmote('happy', 1.5);
-    this.effects.burst({ x: this.player.cx, y: this.player.cy - 30 }, '#FFE9B8', 30, 320);
+    for (const p of this.players) { p.playEmote('happy', 1.5); this.effects.burst({ x: p.cx, y: p.cy - 30 }, '#FFE9B8', 30, 320); }
   }
 
   // ------------------------------------------------------------------ rendering
@@ -511,7 +648,7 @@ export class Game {
     // portals (on walls, behind bodies)
     for (const p of this.portals.pair) drawPortal(ctx, p, this.time, this.portals.linked);
     // portal preview while holding portal gun
-    if (this.state === 'playing' && this.weapons.current === 'portal') this.drawPortalPreview(ctx);
+    if (this.state === 'playing' && this.weapons && this.weapons.current === 'portal') this.drawPortalPreview(ctx);
     // pickups
     for (const p of this.pickups) if (!p.taken) drawPickup(ctx, p, this.time);
     // gifts
@@ -521,16 +658,16 @@ export class Game {
       if (b.dead || b.kind === 'cat' || b.type === 'kinematic' || !inView(b.x, b.y, b.w, b.h)) continue;
       drawProp(ctx, b, this.time);
     }
-    // gravity beam
-    if (this.weapons.current === 'gravity') this.effects.drawGravityBeam(ctx, this.weapons, this.time);
-    // cat
-    drawCat(ctx, this.player, this.time, this.weapons.view());
+    // gravity beams + cats (the partner cat is just another thing in the world; the local cat is drawn last, on top)
+    const slots = this.activeSlots().sort((a, b) => (a.player === this.player) - (b.player === this.player));
+    for (const s of slots) if (s.weapons.current === 'gravity') this.effects.drawGravityBeam(ctx, s.weapons, this.time);
+    for (const s of slots) drawCat(ctx, s.player, this.time, s.weapons.view());
     // optical media haze (the cat is inside it)
     for (const p of this.puzzles) if (p.drawOverlay) p.drawOverlay(ctx, this.time);
     // portal front rings again lightly to give depth when passing through
     for (const p of this.portals.pair) if (p.active) { ctx.globalAlpha = 0.35; drawPortal(ctx, p, this.time, this.portals.linked); ctx.globalAlpha = 1; }
     // interact prompts
-    for (const it of this.interactables) if (it.near) { ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3; const y = it.y - 12 + Math.sin(this.time * 5) * 2; const lbl = `[${this.btn('e')}]`; ctx.strokeText(lbl, it.x, y); ctx.fillText(lbl, it.x, y); }
+    for (const it of this.interactables) if (it.near && (it.slot === undefined || it.slot === this.localPlayerSlot.index)) { ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3; const y = it.y - 12 + Math.sin(this.time * 5) * 2; const lbl = `[${this.btn('e')}]`; ctx.strokeText(lbl, it.x, y); ctx.fillText(lbl, it.x, y); }
     // signs
     for (const s of this.signs) if (inView(s.x, s.y, TILE, TILE)) drawSign(ctx, s);
     this.effects.draw(ctx, this.time);

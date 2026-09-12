@@ -7,7 +7,9 @@
     "start": "node tools/serve.mjs",
     "test": "node tools/test.mjs",
     "shots": "node tools/smoke.mjs",
-    "walk": "node tools/walkthroughs/all.mjs"
+    "walk": "node tools/walkthroughs/all.mjs",
+    "server": "node server/index.mjs",
+    "test:net": "node tools/nettest.mjs"
   },
   "license": "MIT"
 }

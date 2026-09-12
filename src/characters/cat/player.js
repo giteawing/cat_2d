@@ -29,10 +29,14 @@ export const Anim = {
 };
 
 export class Player {
-  constructor(x, y) {
+  /** @param opts.palette 'orange' (player 1) | 'black' (player 2) — same cat, different coat; @param opts.slot 0|1 */
+  constructor(x, y, opts = {}) {
+    this.palette = opts.palette || 'orange';
+    this.slot = opts.slot ?? 0;
     this.body = new Body({ type: BodyType.CHARACTER, x, y: y, w: CAT_W, h: CAT_H, mass: 4, friction: 0, bounce: 0, airDrag: 0, grabbable: false, portalable: true, kind: 'cat', maxSpeed: 1600, density: 0.55 });   // a cat floats with its head and shoulders above the water
     this.body.controller = this;
     this.body.tag = 'player';
+    this.body.slot = this.slot;
     this.facing = 1;
     this.aimX = 1; this.aimY = 0;      // world-space aim direction (unit)
     this.aimAngle = 0;
