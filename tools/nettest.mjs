@@ -104,9 +104,36 @@ await run([A, C, D], 20);
 check('a third client is refused (full)', D.net.slot === -1 && !D.game.net && D.net.statusText.includes('занят'), D.net.statusText);
 
 // restart from A → both reload
+const seq3 = sg.levelSeq;
 A.net.ui('restart');
 await run([A, C], 30);
-check('restart requested online reloads for everyone', sg.levelSeq === seq2 + 1 && A.game.levelSeq >= 2 && C.game.state === 'playing' && sg.playerCount() === 2, `seq=${sg.levelSeq}`);
+check('restart requested online reloads for everyone', sg.levelSeq === seq3 + 1 && C.game.state === 'playing' && sg.playerCount() === 2, `seq=${sg.levelSeq}`);
+
+await run([A, C], 20);
+// gravity gun over the network: A grabs the nearest prop; the server holds it and both clients see it held
+{
+  const me = sg.slots[0].player;
+  const prop = sg.world.bodies.filter((b) => b.grabbable && !b.dead).sort((a, b) => Math.hypot(a.cx - me.cx, a.cy - me.cy) - Math.hypot(b.cx - me.cx, b.cy - me.cy))[0];
+  sg.slots[0].weapons.unlock('gravity'); sg.slots[0].weapons.select('gravity');
+  prop.x = me.cx + 2 * TILE; prop.y = me.body.y; prop.vx = 0; prop.vy = 0; prop.wake();
+  await run([A, C], 20);
+  A.d.aimWorld(prop.cx, prop.cy); await run([A, C], 3); A.d.click(0); await run([A, C], 60);
+  check('gravity grab over the network: server holds it, both clients see it held', sg.slots[0].weapons.held === prop && A.game.weapons.held && A.game.weapons.held.netId === prop.netId && C.game.slots[0].weapons.held && C.game.slots[0].weapons.held.netId === prop.netId, `server=${sg.slots[0].weapons.held === prop} A=${!!A.game.weapons.held} C=${!!C.game.slots[0].weapons.held}`);
+  A.d.aimWorld(me.cx + 200, me.cy - 100); await run([A, C], 3); A.d.click(0); await run([A, C], 20);
+  check('throw over the network: released on the server, client prop follows', !sg.slots[0].weapons.held && Math.hypot(A.game.netBodies.get(prop.netId).x - prop.x, A.game.netBodies.get(prop.netId).y - prop.y) < 60);
+}
+// tunneling toggle by player 2 is visible everywhere
+sg.slots[1].player.tunnelUnlocked = true; await run([A, C], 5); C.d.tap('KeyQ'); await run([A, C], 10);
+check('player 2 quantum toggle (Q) syncs to server and partner', sg.slots[1].player.tunneling && C.game.player.tunneling && A.game.slots[1].player.tunneling);
+// local pause does not stop the shared world
+C.d.tap('Escape'); await run([A, C], 8);
+check('Esc pauses only locally; the server keeps playing', C.game.state === 'paused' && sg.state === 'playing');
+C.d.tap('Escape'); await run([A, C], 5);
+// menu → level change by one player applies to everyone
+A.net.ui('menu'); await run([A, C], 10);
+check('menu action → all clients on level select', sg.state === 'select' && A.game.state === 'select' && C.game.state === 'select');
+A.net.ui('level', 1); await run([A, C], 30);
+check('level chosen by one player loads for both (two cats)', sg.levelIndex === 1 && A.game.levelIndex === 1 && C.game.levelIndex === 1 && C.game.state === 'playing' && sg.playerCount() === 2 && C.game.player.palette === 'black');
 
 console.log(`\n${passes} passed, ${fails} failed`);
 session.stop(); server.close();
